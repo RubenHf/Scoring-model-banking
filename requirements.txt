@@ -1,0 +1,4 @@
+dash
+copy
+plotly
+pandas
