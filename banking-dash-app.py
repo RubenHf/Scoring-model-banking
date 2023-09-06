@@ -3,7 +3,7 @@ import dash
 from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
 
 app = dash.Dash(__name__)
-
+server = app.server
 app.layout = html.Div([
     html.H1("Hello Heroku!"),
     dcc.Input(id='my-input', value='Hello, Heroku!', type='text'),

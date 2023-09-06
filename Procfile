@@ -1,1 +1,1 @@
-web: gunicorn banking-dash-app:app
+web: gunicorn banking-dash-app:server
