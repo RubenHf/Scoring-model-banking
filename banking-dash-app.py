@@ -157,7 +157,8 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
 ##### Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
-
+server = app.server
+#app.title = 'Sidebar'
 
 # App layout
 app.layout = html.Div([
@@ -594,4 +595,5 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    #app.run(debug=True)
+    app.run_server(debug=True)
