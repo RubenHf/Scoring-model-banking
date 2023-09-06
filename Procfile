@@ -1,1 +1,1 @@
-web: gunicorn banking-dash-app.py
+web: gunicorn banking-dash-app:app
