@@ -1,5 +1,6 @@
 .ipynb_checkpoints/
 mlruns/
+venv/
 access git.txt
 application_test.csv
 application_train.csv
@@ -8,6 +9,7 @@ bureau_balance.csv
 credit_card_balance.csv
 HomeCredit_columns_description.csv
 concatenate_files.csv
+concatenate_files_data_drift.csv
 installments_payments.csv
 POS_CASH_balance.csv
 previous_application.csv
