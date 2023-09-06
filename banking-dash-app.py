@@ -535,6 +535,7 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
             
         return table1, table2, figure_score, option_drop_var, option_drop_clients, option_drop_var_graph, selected_affichage, figure_variables, figure_feat_imp, n_clicks_file, file_sent, n_clicks_dl_file_all, n_clicks_dl_file_clients 
 
-# Run the app
-if __name__ == '__main__':
-    app.run(debug=True)
+port = int(os.environ.get("PORT", 8050))
+
+if __name__ == "__main__":
+    app.run_server(host="0.0.0.0", port=port)
