@@ -2,3 +2,8 @@ dash
 copy
 plotly
 pandas
+base64
+io
+numpy
+itertools
+mlflow
