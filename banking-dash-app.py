@@ -238,6 +238,7 @@ def return_dataframe_client(df, list_client):
 
 
 
+
 def feature_importance_threshold(df, feats, importance, variance_importance = 0.9):
 
     # On récupère le total
@@ -255,7 +256,9 @@ def feature_importance_threshold(df, feats, importance, variance_importance = 0.
     # On ne sélectionne que les features
     cols_num = [cols_num for cols_num, val in zip(cumsum.index, cumsum) if val <= variance_threshold]
     
-    return df[df.index.isin(cols_num)]
+    sorted_df = copy.copy(df.loc[df.index.isin(cols_num), :]) 
+    
+    return sorted_df
 
 def figure_feature_importance_dash(df, feats, importance, size, variance_importance = 0.9, color_point = "plotly", list_feat = None):
     ## 
@@ -264,7 +267,6 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
     #    variance_importance = 0.5 : On affiche les variables qui ont 50 % du poids du modèle 
     #    variance_importance = 1 : On affiche l'ensemble des variables qui contribue au modèle
     ##
-    
     
     # on ajuste la couleur des barres du graphique
     if color_point == "colorblind":
@@ -276,7 +278,8 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
         
     mask = feature_importance_threshold(df, feats, importance, variance_importance)
     
-    mask.sort_values(importance, ascending = True, inplace = True)
+
+    mask.sort_values(by=importance, ascending = True, inplace = True)
     
     # Permet de standardiser la taille du nom des variables, selon la taille du texte
     mask["truncated"] = mask[feats].str[:(60 - size)]
@@ -291,6 +294,7 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
                    )
         
     # Si on a une liste de features sélectionnées, on les met en avant
+    
     if list_feat:
         colors = [color_bar_selected if f in list_feat else color_bar for f in mask[feats]]
         figure.update_traces(marker_color=colors)
@@ -298,6 +302,7 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
         figure.update_traces(marker_color=color_bar)
         
     figure.update_yaxes(ticktext=mask["truncated"], tickvals=list(range(len(mask["truncated"]))))
+    
     figure.update_layout(
         title=dict(
             text = (
@@ -316,7 +321,6 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
             tickvals=list(range(mask.shape[0])),  
             dtick=1,  
             automargin=True)
-    
     )
     # On retourne la figure
     return figure
@@ -499,6 +503,7 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
     
     global file_df
     global file_df_client_score
+    
     # On charge le fichier 
     if content is not None: 
         content_type, content_string = content.split(",")
@@ -524,19 +529,29 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
     # Par défaut, si aucun fichier de chargé
     if file_df is None :
         table1, table2 = dash_table.DataTable(), dash_table.DataTable()
-        figure_score, figure_variables, figure_feat_imp, figure_feature_importance_client = px.scatter(), px.scatter(), px.bar(), px.bar()
+        figure_score, figure_variables, figure_feature_importance_client = px.scatter(height=0), px.scatter(height=0), px.bar(height=0)
         option_drop_var, option_drop_clients, option_drop_var_graph, option_client_variable = [], [], [], []
-        selected_affichage = None
+        selected_affichage, content = None, None,
         n_clicks_dl_file_all, n_clicks_dl_file_clients = 0, 0
-        return table1, table2, figure_score, option_drop_var, option_drop_clients, option_drop_var_graph, selected_affichage, figure_variables, figure_feat_imp, n_clicks_file, content, None, n_clicks_dl_file_all, n_clicks_dl_file_clients, option_client_variable
+        figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", font_size, variance_importance, color_point, selected_variable)
+        
+        return (table1, table2, 
+                figure_score, option_drop_var, 
+                    option_drop_clients, option_drop_var_graph, 
+                        selected_affichage, figure_variables, 
+                            figure_feat_imp, n_clicks_file, content, 
+                                None, n_clicks_dl_file_all, 
+                                    n_clicks_dl_file_clients, figure_feature_importance_client, option_client_variable)
     
     elif file_df is not None :
         # On met à jour la liste de dropdown
         # La liste de variable est dépendante de la liste de feature importance
-        
+
         feat_imp_threshold = feature_importance_threshold(feature_importance, "Features", "Importance", variance_importance).Features.values
         option_drop_var=[{'label': str(var), 'value': var} for var in [col for col in feat_imp_threshold]]
         option_drop_clients=[{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR']]
+
+        # On prend la colonne ID client et les dernières colonnes liées à la prédiction crédit
         cols = [0] + list(range(-6, 0))
 
         if selected_client == []:
@@ -568,6 +583,7 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
                 page_size=10,
                 style_table={'overflowX': 'auto'}
             )
+
         if scoring_choisie == "score" :
             threshold = 0
             textH = threshold + 5
@@ -577,7 +593,7 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
             threshold = 1 - proba_threshold
             textH = threshold + 0.05
             textB = threshold - 0.05
-            
+ 
         if scoring_choisie in ["score", "proba_pred_pret"]:
             figure_score = px.strip(file_df, y=scoring_choisie,
                         # On fait figurer le nom des clients et leur note
@@ -632,7 +648,7 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
                         text = "Comptage (nombre de client(s))",
                         font=dict(size=20, color="black"),
                     ))
-        
+
         figure_score.update_layout(font=dict(size=font_size, color="black"))
         
         # On revient à la condition initiale
@@ -703,7 +719,6 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
             figure_variables.update_layout(font=dict(size=font_size, color="black"))
             if selected_affichage != "density":
                 figure_variables.update_traces(marker=dict(size=point_size))
-            
 
         if (type(selected_client) == list) and (selected_client is not None) and (scoring_choisie != "score_note"):
             # On met à jour les graphiques avec les clients sélectionnés
@@ -740,7 +755,6 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
                                                 marker_line_color="black", marker_line_width=2)
                         figure_variables.add_trace(selected_trace_p.data[0])
 
-
             if not selected_data_np.empty:
                 # Mise à jour du graphique score avec les clients sélectionnés
                 selected_trace_np = px.strip(selected_data_np, y=scoring_choisie, 
@@ -769,36 +783,42 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
                                  ).update_traces(marker_size=point_size+18, name = "Sélectionné(s)",
                                                 marker_line_color="black", marker_line_width=2)
                         figure_variables.add_trace(selected_trace_np.data[0])
-        
+
         # On prépare le graphique sur les features importances du modèle
-        
         figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", font_size, variance_importance, color_point, selected_variable)        
-    
+
         if selected_client is not None:
             option_client_variable = [clients for clients in selected_client]
+            
             if selected_client_variable is not None:
-                
                 df1 = file_df_client_score[file_df_client_score.SK_ID_CURR == selected_client_variable]
                 df2 = file_df[file_df.SK_ID_CURR == selected_client_variable]
-
-                figure_feature_importance_client = figure_feature_client_dash(df1, df2, nb_variable = 10, color_point = "plotly", size = 18)            
-
+                figure_feature_importance_client = figure_feature_client_dash(df1, df2, nb_variable = 10, color_point = color_point, size = font_size)            
+ 
         list_var_dl = ["SK_ID_CURR", "score", "score_note"]
-        
         # On télécharge l'ensemble des données clients
         if n_clicks_dl_file_all > 0:
-            file_sent = dcc.send_data_frame(file_df[list_var_dl].to_csv, "Result_prediction_all.csv")
+            file_sent = dcc.send_data_frame(file_df[list_var_dl].to_csv, "Result_prediction_all.csv", index=False)
             n_clicks_dl_file_all = 0
         # On télécharge les données des clients sélectionnés
         elif n_clicks_dl_file_clients > 0 :
             # Safegard pour éviter toute erreur de téléchargement
             if selected_client is not None:
-                file_sent = dcc.send_data_frame(file_df.loc[file_df.SK_ID_CURR.isin(selected_client), list_var_dl].to_csv, "Result_prediction_client.csv")
+                file_sent = dcc.send_data_frame(file_df.loc[file_df.SK_ID_CURR.isin(selected_client), list_var_dl].to_csv, "Result_prediction_client.csv", index=False)
+            else:
+                file_sent = None
             n_clicks_dl_file_clients = 0
+            
         else :
             file_sent = None
-            
-        return table1, table2, figure_score, option_drop_var, option_drop_clients, option_drop_var_graph, selected_affichage, figure_variables, figure_feat_imp, n_clicks_file, content, file_sent, n_clicks_dl_file_all, n_clicks_dl_file_clients, figure_feature_importance_client, option_client_variable 
+        return (table1, table2, 
+                figure_score, option_drop_var, 
+                    option_drop_clients, option_drop_var_graph, 
+                        selected_affichage, figure_variables, 
+                        figure_feat_imp, n_clicks_file, 
+                            content, file_sent, 
+                                n_clicks_dl_file_all, n_clicks_dl_file_clients, 
+                                    figure_feature_importance_client, option_client_variable )
 
 # Run the app
 if __name__ == '__main__':
