@@ -1,80 +1,242 @@
 import dash
-import mlflow
 from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
 import pandas as pd
+import plotly
+import dash
 import plotly.express as px
+import plotly.subplots as sp
 import copy
 import base64
 import io
 import numpy as np
 import itertools
+import mlflow
+import shap
+import pickle
 from mlflow.sklearn import load_model
+
+# On load le modèle 
+model = load_model("banking_model_20230901135647")
 
 proba_threshold = 0.42
 
-force = np.random.rand(99)
-var = ['AMT_ANNUITY', 'AMT_GOODS_PRICE', 'REGION_POPULATION_RELATIVE',
-       'DAYS_REGISTRATION', 'FLAG_MOBIL', 'CNT_FAM_MEMBERS',
-       'LIVE_REGION_NOT_WORK_REGION', 'REG_CITY_NOT_LIVE_CITY',
-       'REG_CITY_NOT_WORK_CITY', 'LIVE_CITY_NOT_WORK_CITY', 'EXT_SOURCE_2',
-       'OBS_30_CNT_SOCIAL_CIRCLE', 'OBS_60_CNT_SOCIAL_CIRCLE',
-       'FLAG_DOCUMENT_2', 'AMT_REQ_CREDIT_BUREAU_YEAR',
-       'NAME_CONTRACT_TYPE_Cash loans', 'NAME_INCOME_TYPE_Maternity leave',
-       'NAME_INCOME_TYPE_Unemployed', 'NAME_EDUCATION_TYPE_Academic degree',
-       'NAME_EDUCATION_TYPE_Lower secondary',
-       'NAME_HOUSING_TYPE_Rented apartment', 'OCCUPATION_TYPE_Core staff',
-       'OCCUPATION_TYPE_IT staff', 'OCCUPATION_TYPE_Laborers',
-       'ORGANIZATION_TYPE_University',
-       'FONDKAPREMONT_MODE_reg oper spec account', 'WALLSMATERIAL_MODE_Others',
-       'WALLSMATERIAL_MODE_Wooden', 'EMERGENCYSTATE_MODE_Yes', 'PAYMENT_RATE',
-       'BURO_DAYS_CREDIT_MIN', 'BURO_DAYS_CREDIT_MAX', 'BURO_DAYS_CREDIT_MEAN',
-       'BURO_DAYS_CREDIT_ENDDATE_MAX', 'BURO_DAYS_CREDIT_ENDDATE_MEAN',
-       'BURO_MONTHS_BALANCE_SIZE_SUM', 'BURO_CREDIT_ACTIVE_Bad debt_MEAN',
-       'BURO_CREDIT_TYPE_Consumer credit_MEAN',
-       'BURO_CREDIT_TYPE_Loan for working capital replenishment_MEAN',
-       'BURO_CREDIT_TYPE_Unknown type of loan_MEAN', 'ACTIVE_DAYS_CREDIT_MIN',
-       'ACTIVE_DAYS_CREDIT_MAX', 'ACTIVE_MONTHS_BALANCE_SIZE_SUM',
-       'CLOSED_DAYS_CREDIT_MAX', 'CLOSED_DAYS_CREDIT_ENDDATE_MEAN',
-       'CLOSED_MONTHS_BALANCE_SIZE_SUM', 'PREV_AMT_ANNUITY_MAX',
-       'PREV_APP_CREDIT_PERC_MAX', 'PREV_AMT_GOODS_PRICE_MEAN',
-       'PREV_HOUR_APPR_PROCESS_START_MIN', 'PREV_HOUR_APPR_PROCESS_START_MAX',
-       'PREV_RATE_DOWN_PAYMENT_MIN', 'PREV_RATE_DOWN_PAYMENT_MAX',
-       'PREV_RATE_DOWN_PAYMENT_MEAN', 'PREV_DAYS_DECISION_MAX',
-       'PREV_NAME_CONTRACT_TYPE_Cash loans_MEAN',
-       'PREV_NAME_CONTRACT_TYPE_Consumer loans_MEAN',
-       'PREV_NAME_CASH_LOAN_PURPOSE_XNA_MEAN',
-       'PREV_NAME_CONTRACT_STATUS_Canceled_MEAN',
-       'PREV_NAME_CONTRACT_STATUS_Unused offer_MEAN',
-       'PREV_NAME_PAYMENT_TYPE_Non-cash from your account_MEAN',
-       'PREV_CODE_REJECT_REASON_CLIENT_MEAN',
-       'PREV_CODE_REJECT_REASON_HC_MEAN', 'PREV_CODE_REJECT_REASON_SCO_MEAN',
-       'PREV_CODE_REJECT_REASON_VERIF_MEAN',
-       'PREV_NAME_TYPE_SUITE_Unaccompanied_MEAN',
-       'PREV_NAME_GOODS_CATEGORY_Weapon_MEAN',
-       'PREV_NAME_GOODS_CATEGORY_XNA_MEAN', 'PREV_NAME_PORTFOLIO_Cash_MEAN',
-       'PREV_NAME_PORTFOLIO_POS_MEAN', 'PREV_NAME_PRODUCT_TYPE_XNA_MEAN',
-       'PREV_NAME_PRODUCT_TYPE_x-sell_MEAN',
-       'PREV_NAME_SELLER_INDUSTRY_Clothing_MEAN',
-       'PREV_NAME_SELLER_INDUSTRY_XNA_MEAN', 'PREV_NAME_YIELD_GROUP_XNA_MEAN',
-       'PREV_NAME_YIELD_GROUP_low_action_MEAN',
-       'PREV_NAME_YIELD_GROUP_middle_MEAN',
-       'PREV_PRODUCT_COMBINATION_Cash Street: middle_MEAN',
-       'PREV_PRODUCT_COMBINATION_Cash X-Sell: high_MEAN',
-       'PREV_PRODUCT_COMBINATION_POS household without interest_MEAN',
-       'APPROVED_AMT_ANNUITY_MIN', 'APPROVED_AMT_ANNUITY_MAX',
-       'APPROVED_AMT_APPLICATION_MAX', 'APPROVED_APP_CREDIT_PERC_MIN',
-       'APPROVED_AMT_GOODS_PRICE_MAX', 'APPROVED_HOUR_APPR_PROCESS_START_MIN',
-       'APPROVED_HOUR_APPR_PROCESS_START_MAX',
-       'APPROVED_RATE_DOWN_PAYMENT_MIN', 'APPROVED_RATE_DOWN_PAYMENT_MEAN',
-       'APPROVED_DAYS_DECISION_MAX', 'POS_MONTHS_BALANCE_MAX',
-       'POS_MONTHS_BALANCE_MEAN', 'POS_NAME_CONTRACT_STATUS_XNA_MEAN',
-       'INSTAL_PAYMENT_DIFF_MAX', 'INSTAL_DAYS_ENTRY_PAYMENT_MAX',
-       'INSTAL_DAYS_ENTRY_PAYMENT_MEAN', 'INSTAL_COUNT', 'ANNEES_AGE']
+# on charge l'objet explainer du modèle
+with open('explainer_model.pkl', 'rb') as explainer_file:
+    explainer_model = pickle.load(explainer_file)
+# on charge les valeurs du modèle
+feature_importance = pd.read_csv("shap_values_model.csv") 
 
-feature_importance  = [[v, round(r, 2)] for v, r in zip(var, force)]
-feature_importance = pd.DataFrame(feature_importance, columns = ["Features", "Importance"]).sort_values("Importance", ascending = True)
 
-file_df = None
+def preparation_file(df, model):
+    
+    if "DAYS_BIRTH" in df.columns:
+        df["ANNEES_AGE"] = (abs(df.DAYS_BIRTH) / 365.25)
+        # On élimine l' ancienne variable
+        df.drop(["DAYS_BIRTH"], axis = 1, inplace = True)
+        
+    if "ANNEES_LAST_PHONE_CHANGE" in df.columns:
+        df["ANNEES_LAST_PHONE_CHANGE"] = round((abs(df.DAYS_LAST_PHONE_CHANGE) / 365.25), 2)
+        # On élimine l' ancienne variable
+        df.drop(["DAYS_LAST_PHONE_CHANGE"], axis = 1, inplace = True)
+    
+    # On corrige les erreurs 
+    infinity_indices = np.where(np.isinf(df))
+    for row_ind, col_ind in zip(*infinity_indices):
+        df.iloc[row_ind, col_ind] = df.iloc[:,col_ind].median()
+    
+    # On récupère les features du modèle
+    features = model.named_steps["select_columns"].columns
+    
+    return  df[features]
+
+def scoring_pret(df, threshold):
+    
+    # On calcul un score selon si le client a obtenu un prêt ou pas
+    # Ce score donne une autre appréciation des probabilités, plus parlant pour un consommateur
+    min_value = 1 - threshold  # Minimum value of proba_pred_pret
+    max_value = 1 - threshold
+    
+    df.loc[df.prediction_pret == "Pret", "score"] = (df["proba_pred_pret"] - min_value) / (1 - min_value)
+    df.loc[df.prediction_pret == "Non pret", "score"] = (1 - (df["proba_pred_pret"]) / (max_value)) * - 1
+    df.loc[:, "score"] = round(df.loc[:, "score"], 4)
+    
+    lettres = ['a', 'b', 'c', 'd', 'e', 'f']
+    signes = ['++', '+', '-', '--']
+
+    # On génére 2 dictionnaires
+    bon_clients = {}
+    mauvais_clients = {}
+
+    point_decr = (100 / ((len(lettres) * len(signes)) / 2)) / 100
+
+    point = 1
+    for l, s in itertools.product(lettres[:3], signes):
+        key = l + s
+        bon_clients[key] = round(point, 2)
+        point -= point_decr
+    
+    point = 0
+    for l, s in itertools.product(lettres[3:], signes):
+        key = l + s
+        mauvais_clients[key] = round(point, 2)*-1
+        point += point_decr
+
+    condition1 = df.prediction_pret == "Pret"
+    condition2 = df.prediction_pret == "Non pret"
+
+    for keys, items in bon_clients.items():
+        df.loc[(condition1) & (df.score <= items), "score_note"] = keys
+
+    for keys, items in mauvais_clients.items():
+        df.loc[(condition2) & (df.score <= items), "score_note"] = keys
+
+
+    df.loc[:, "score"] = round(df.loc[:, "score"]*100, 2)
+    
+    return df
+
+
+def application_model(df, model, threshold):
+    
+    result_df = copy.deepcopy(df)
+    
+    # On prédit les probabilité selon le modèle
+    # Prédiction d'avoir un prêt
+    result_df["proba_pred_pret"] = model.predict_proba(df)[:, 0]
+    # Prédiction de ne pas avoir un prêt
+    result_df["proba_pred_non_pret"] = 1 - result_df["proba_pred_pret"]
+    
+    # Résultat selon le threshold du modèle établit. 
+    # Si au dessus, la valeur = 1, ce qui correspond à la non obtention d'un prêt
+    result_df["prediction"] = np.where(result_df["proba_pred_non_pret"] >= threshold, 1, 0)
+    
+    result_df["prediction_pret"] = np.where(result_df["prediction"] == 1, "Non pret", "Pret")
+    result_df = scoring_pret(result_df, threshold)
+    
+    return result_df
+
+
+def feature_importance_client(df, model, explainer_model): 
+    
+    features = model.named_steps["select_columns"].columns
+    
+    x_train_preprocessed = model[:-1].transform(df[features])
+    
+    selected_cols = df[features].columns[model.named_steps["feature_selection"].get_support()]
+    
+    x_train_preprocessed = pd.DataFrame(x_train_preprocessed, columns = selected_cols)
+    
+    shap_values = explainer_model(x_train_preprocessed)
+    
+    df_sk_shape = pd.DataFrame({'SK_ID_CURR': df["SK_ID_CURR"].values, 'value_total': shap_values.values.sum(axis=1)})
+
+    df_feat_shape = pd.DataFrame(shap_values.values, columns = selected_cols)
+
+    df_shape_score = pd.concat([df_sk_shape, df_feat_shape], axis = 1)
+    
+    return df_shape_score
+
+
+def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_point = "plotly", size = 18):
+    
+    # on ajuste la couleur des barres du graphique
+    if color_point == "colorblind":
+        color_bar = "#648FFF"
+        color_bar_selected = "#FFB000"
+    else :
+        color_bar = "blue"
+        color_bar_selected = "red"
+     
+    figure_height = (df_shape.shape[0] * size)
+    
+    for i, client in df_shape.iterrows():
+
+        figure_height = 200 + (len(client[2:]) * size+1)
+        
+        # on trie les variables selon leur influence sur le résultat et on ne garde que les nb_variables premières valeurs
+        index = abs(client[2:]).sort_values(ascending=True)[-nb_variable:].index
+        
+        nomVar = str(f"SOMME DES VARIABLES RESTANTES ({(len(client) - 2 - nb_variable)})")
+        # Ajout du score des variables non calculées
+        client.loc[nomVar] = client[~client.index.isin(index)][2:].sum()
+        
+        # on ajoute sous la forme d'un index
+        index = index.insert(0, pd.Index([nomVar]))
+        
+        # Pour afficher les valeurs sur le graphiques
+        texte_liste = round(client[index], 2).astype(str).values
+        # Permet de standardiser la taille du nom des variables
+        texte_variable = index[1:].str[:20]
+        
+        texte_valeur = df_client[index[1:]].values[0]
+
+        # on format
+        texte_valeur = [round(x) if abs(x) > 5 else round(x, 2) for x in texte_valeur]
+
+        
+        # On ajoute la valeur de la variable au nom de la variable
+        combined_texte = [f"{x} ({y})" for x, y in zip(texte_variable, texte_valeur)]
+
+        combined_texte.insert(0, pd.Index([nomVar]))
+
+        figure_var = px.bar(client[index], 
+                        y=index, 
+                        x=round(client[index], 2).values,
+                        text=texte_liste,  
+                        height=figure_height)
+
+        # on met une couleur selon si la variable a une influence positive ou négative sur le score.
+        colors = [color_bar_selected if client[col] <= 0 else color_bar for col in client[index].index]
+        figure_var.update_traces(marker_color=colors)
+        
+        shape_global = {'nom': ["Résultat global"], 'valeur': round(client[1], 2)}
+        figure_global = px.bar(shape_global,
+                        x='valeur',
+                        text='valeur',
+                        height=200)
+        colors = [color_bar_selected if shape_global["valeur"] <= 0 else color_bar]
+        figure_global.update_traces(marker_color=colors)
+        
+        # On crée un subplot de 2 lignes, avec une différence de taille entre les 2 figures
+        fig_general = sp.make_subplots(rows=2, cols=1, row_heights=[9, 1], shared_xaxes=True,
+                              subplot_titles=("Valeurs par variable", "Valeur globale"),
+                              vertical_spacing=0.1)
+
+        # On ajoute la première figure en haut
+        for trace in figure_var.data:
+            fig_general.add_trace(trace, row=1, col=1)
+
+        # On ajoute la seconde en bas
+        for trace in figure_global.data:
+            fig_general.add_trace(trace, row=2, col=1)  
+
+        fig_general.update_yaxes(ticktext=combined_texte, tickvals=list(range(nb_variable+1)), row=1, col=1)
+        fig_general.update_yaxes(ticktext=[shape_global["nom"]], tickvals=[0], row=2, col=1)
+        fig_general.update_layout(height=figure_height)
+
+        fig_general.update_layout(
+            title=dict(
+                text = (f"Les 10 variables contribuant le plus à la prédiction du client : {round(client[0])} "),
+                font=dict(size=8+size, color="black"), x=0.5, xanchor='center'),
+            
+            font=dict(size=size, color="black"),
+            xaxis=dict(title = "Importance relative de chaque variable"),
+            yaxis=dict(title = "Variable(s) d'intérêt(s)",
+                tickmode='array', tickvals=list(range(nb_variable + 1)),  
+                dtick=1, automargin=True)
+        )
+            
+        fig_general.add_shape(type="line", x0=0, x1=0, y0=-0.5, y1=nb_variable+0.5,
+                            line=dict(color="black", width=2), row=1, col=1)
+        fig_general.add_shape(type="line", x0=0, x1=0, y0=-0.5, y1=0.5,
+                            line=dict(color="black", width=2), row=2, col=1)
+
+    return fig_general
+        
+def return_dataframe_client(df, list_client):
+    return df.loc[df.SK_ID_CURR.isin(list_client)]
+
+
 
 def feature_importance_threshold(df, feats, importance, variance_importance = 0.9):
 
@@ -111,8 +273,10 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
     else :
         color_bar = "blue"
         color_bar_selected = "red"
-    
+        
     mask = feature_importance_threshold(df, feats, importance, variance_importance)
+    
+    mask.sort_values(importance, ascending = True, inplace = True)
     
     # Permet de standardiser la taille du nom des variables, selon la taille du texte
     mask["truncated"] = mask[feats].str[:(60 - size)]
@@ -120,7 +284,7 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
     figure_height = 200 + (mask.shape[0] * (size+1))
     
     # On instancie un objet px.bar avec les features filtrées
-    figure = px.bar(mask.sort_values(importance, ascending = True), 
+    figure = px.bar(mask, 
                     y=feats, 
                     x=importance,
                     height=figure_height, 
@@ -146,6 +310,7 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
             xanchor='center'
         ),
         font=dict(size=size, color="black"),
+        xaxis=dict(title = "Importance (valeur absolue)"),
         yaxis=dict(
             tickmode='array',  
             tickvals=list(range(mask.shape[0])),  
@@ -156,11 +321,12 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
     # On retourne la figure
     return figure
 
+
 ##### Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
-#app.title = 'Sidebar'
+app.title = 'Sidebar'
 
 # App layout
 app.layout = html.Div([
@@ -247,7 +413,14 @@ app.layout = html.Div([
             dcc.Slider(id='feature-importance-slider', min=0, max=1, step=0.05, value=0.9,
                 marks={i: str(round(i, 2)) for i in np.arange(0, 1.01, 0.05)}),
             dcc.Graph(id="graph_model", style={'width': '100%', 'float': 'left'}),
-            #dcc.Graph(id="graph_client", style={'height': '600px', 'width': '50%', 'float': 'right'}),
+            dcc.Dropdown(
+                        value=None,
+                        style={'textAlign': 'left', 'color': 'black', 'fontSize': 15},
+                        placeholder="Sélection client parmis les clients sélectionnés",
+                        multi=False,
+                        id='dropdown_client_var'
+                ),
+            dcc.Graph(id="graph_client", style={'width': '100%', 'float': 'left'}),
             
         ]),
         # Choix des variables à représenter
@@ -288,9 +461,12 @@ app.layout = html.Div([
     Output(component_id="graph_variables", component_property="figure"),
     Output(component_id="graph_model", component_property="figure"),
     Output(component_id="test_file_button", component_property="n_clicks"),
+    Output(component_id="upload-data", component_property="contents"),
     Output(component_id="download-data", component_property="data"),
     Output(component_id="download-data_all-button", component_property="n_clicks"),
     Output(component_id="download-data_client-button", component_property="n_clicks"),
+    Output(component_id="graph_client", component_property="figure"),
+    Output(component_id="dropdown_client_var", component_property="options"),
     
     Input(component_id="test_file_button", component_property="n_clicks"),
     Input(component_id="dropdown_client", component_property="value"),
@@ -304,13 +480,14 @@ app.layout = html.Div([
     Input(component_id="feature-importance-slider", component_property="value"),
     Input(component_id="download-data_all-button", component_property="n_clicks"),
     Input(component_id="download-data_client-button", component_property="n_clicks"),
+    Input(component_id="dropdown_client_var", component_property="value"),
     
     
 )
 
 
 
-def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, selected_variable, content, font_size, point_size, color_point, selected_affichage, variance_importance, n_clicks_dl_file_all, n_clicks_dl_file_clients):
+def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, selected_variable, content, font_size, point_size, color_point, selected_affichage, variance_importance, n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_client_variable):
     
     # On défini des couleurs selon la condition
     if color_point == "plotly" :
@@ -321,24 +498,37 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
         color_discrete_map = {"Pret": '#648FFF', "Non pret": '#FFB000'}
     
     global file_df
+    global file_df_client_score
     # On charge le fichier 
     if content is not None: 
         content_type, content_string = content.split(",")
         decoded = base64.b64decode(content_string)
         file_df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+        
+        # Plusieurs étapes de préparation du fichier
+        file_df = preparation_file(file_df, model)
+        file_df = application_model(file_df, model, proba_threshold)
+        file_df_client_score = feature_importance_client(file_df, model, explainer_model)
+        
+        # On remet la valeur par défaut pour permettre de nouveaux téléchargements
+        content = None
      
     # On charge le fichier test.csv
     if n_clicks_file == 1:
         file_df = pd.read_csv("test.csv")
+        # On mesure les différentes métriques
+        file_df = application_model(file_df, model, proba_threshold)
+        file_df_client_score = feature_importance_client(file_df, model, explainer_model)
         n_clicks_file = 0
         
     # Par défaut, si aucun fichier de chargé
     if file_df is None :
         table1, table2 = dash_table.DataTable(), dash_table.DataTable()
-        figure_score, figure_variables, figure_feat_imp = px.scatter(), px.scatter(), px.bar()
-        option_drop_var, option_drop_clients, option_drop_var_graph = [], [], []
+        figure_score, figure_variables, figure_feat_imp, figure_feature_importance_client = px.scatter(), px.scatter(), px.bar(), px.bar()
+        option_drop_var, option_drop_clients, option_drop_var_graph, option_client_variable = [], [], [], []
         selected_affichage = None
-        return table1, table2, figure_score, option_drop_var, option_drop_clients, option_drop_var_graph, selected_affichage, figure_variables, figure_feat_imp, None, n_clicks_dl_file
+        n_clicks_dl_file_all, n_clicks_dl_file_clients = 0, 0
+        return table1, table2, figure_score, option_drop_var, option_drop_clients, option_drop_var_graph, selected_affichage, figure_variables, figure_feat_imp, n_clicks_file, content, None, n_clicks_dl_file_all, n_clicks_dl_file_clients, option_client_variable
     
     elif file_df is not None :
         # On met à jour la liste de dropdown
@@ -346,7 +536,6 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
         
         feat_imp_threshold = feature_importance_threshold(feature_importance, "Features", "Importance", variance_importance).Features.values
         option_drop_var=[{'label': str(var), 'value': var} for var in [col for col in feat_imp_threshold]]
-        #option_drop_var=[{'label': str(var), 'value': var} for var in [col for col in file_df.iloc[:, 1:100].columns]]
         option_drop_clients=[{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR']]
         cols = [0] + list(range(-6, 0))
 
@@ -422,16 +611,17 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
         else : 
             nb_pret = file_df[file_df.prediction_pret == 'Pret'].shape[0]
             nb_non_pret = file_df[file_df.prediction_pret == 'Non pret'].shape[0]
-
+            nb_max = file_df["score_note"].value_counts().max()
+            
             figure_score = px.histogram(file_df.sort_values("score_note"), x = "score_note",
                         color=file_df.sort_values("score_note")["prediction_pret"],  
                         color_discrete_map=color_discrete_map                       
                             # On ajoute un texte au dessus de la ligne              
-                        ).add_annotation(text=f"Prêt (n={nb_pret})", x=3, y=15, showarrow=False,
+                        ).add_annotation(text=f"Prêt (n={nb_pret})", x=1, y=nb_max, showarrow=False,
                             font=dict(color="black", size=20)
 
                         # On ajoute un texte en dessous de la ligne
-                        ).add_annotation(text=f"Non prêt (n={nb_non_pret})", x=13, y=15, showarrow=False,
+                        ).add_annotation(text=f"Non prêt (n={nb_non_pret})", x=20, y=nb_max, showarrow=False,
                             font=dict(color="black", size=20))
 
             figure_score.update_xaxes(title=dict(
@@ -451,13 +641,20 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
         # Si aucune variable n'est sélectionnée, nous n'affichons rien
         if selected_variable == None:
             figure_variables = px.scatter()
+            figure_feature_importance_client = px.bar()
             option_drop_var_graph = []
+            option_client_variable = []
             selected_affichage = None
 
         # Si une ou deux variables sont sélectionnées, on affiche soit un strip, soit un scatterplot
         elif (type(selected_variable) == list) :
-            if len(selected_variable) == 1 :
+            
+            figure_variables = px.scatter()
+            figure_feature_importance_client = px.bar()
+            option_drop_var_graph = []
+            option_client_variable = []
                 
+            if len(selected_variable) == 1 :
                 # On met à jour les options d'affichages pour une variable
                 option_drop_var_graph=[
                         {'label': 'Strip', 'value': 'strip'},
@@ -576,7 +773,16 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
         # On prépare le graphique sur les features importances du modèle
         
         figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", font_size, variance_importance, color_point, selected_variable)        
-        
+    
+        if selected_client is not None:
+            option_client_variable = [clients for clients in selected_client]
+            if selected_client_variable is not None:
+                
+                df1 = df_client_score[df_client_score.SK_ID_CURR == selected_client_variable]
+                df2 = file_df[file_df.SK_ID_CURR == selected_client_variable]
+
+                figure_feature_importance_client = figure_feature_client_dash(df1, df2, nb_variable = 10, color_point = "plotly", size = 18)            
+
         list_var_dl = ["SK_ID_CURR", "score", "score_note"]
         
         # On télécharge l'ensemble des données clients
@@ -585,7 +791,6 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
             n_clicks_dl_file_all = 0
         # On télécharge les données des clients sélectionnés
         elif n_clicks_dl_file_clients > 0 :
-            print(selected_client)
             # Safegard pour éviter toute erreur de téléchargement
             if selected_client is not None:
                 file_sent = dcc.send_data_frame(file_df.loc[file_df.SK_ID_CURR.isin(selected_client), list_var_dl].to_csv, "Result_prediction_client.csv")
@@ -593,9 +798,8 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
         else :
             file_sent = None
             
-        return table1, table2, figure_score, option_drop_var, option_drop_clients, option_drop_var_graph, selected_affichage, figure_variables, figure_feat_imp, n_clicks_file, file_sent, n_clicks_dl_file_all, n_clicks_dl_file_clients 
+        return table1, table2, figure_score, option_drop_var, option_drop_clients, option_drop_var_graph, selected_affichage, figure_variables, figure_feat_imp, n_clicks_file, content, file_sent, n_clicks_dl_file_all, n_clicks_dl_file_clients, figure_feature_importance_client, option_client_variable 
 
-
-if __name__ == "__main__":
-    #app.run(debug=True)
+# Run the app
+if __name__ == '__main__':
     app.run_server(debug=True)
