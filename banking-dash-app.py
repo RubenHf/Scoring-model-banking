@@ -778,7 +778,7 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
             option_client_variable = [clients for clients in selected_client]
             if selected_client_variable is not None:
                 
-                df1 = df_client_score[df_client_score.SK_ID_CURR == selected_client_variable]
+                df1 = file_df_client_score[file_df_client_score.SK_ID_CURR == selected_client_variable]
                 df2 = file_df[file_df.SK_ID_CURR == selected_client_variable]
 
                 figure_feature_importance_client = figure_feature_client_dash(df1, df2, nb_variable = 10, color_point = "plotly", size = 18)            
