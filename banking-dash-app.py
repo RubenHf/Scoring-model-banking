@@ -100,12 +100,12 @@ def scoring_pret(df, threshold):
 def application_model(df, model, threshold):
     
     result_df = copy.deepcopy(df)
-    
+ 
     # On prédit les probabilité selon le modèle
     # Prédiction d'avoir un prêt
-    result_df["proba_pred_pret"] = model.predict_proba(df)[:, 0]
+    result_df["proba_pred_pret"] = np.round(model.predict_proba(result_df)[:, 0], 2)
     # Prédiction de ne pas avoir un prêt
-    result_df["proba_pred_non_pret"] = 1 - result_df["proba_pred_pret"]
+    result_df["proba_pred_non_pret"] = np.round(1 - result_df["proba_pred_pret"], 2)
     
     # Résultat selon le threshold du modèle établit. 
     # Si au dessus, la valeur = 1, ce qui correspond à la non obtention d'un prêt
@@ -113,7 +113,7 @@ def application_model(df, model, threshold):
     
     result_df["prediction_pret"] = np.where(result_df["prediction"] == 1, "Non pret", "Pret")
     result_df = scoring_pret(result_df, threshold)
-    
+
     return result_df
 
 
