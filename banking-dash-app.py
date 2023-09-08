@@ -1,8 +1,7 @@
 import dash
-from dash import Dash, html, dash_table, dcc, callback, Output, Input, State
+from dash import Dash, html, dash_table, dcc, callback, Output, Input, State, ctx
 import pandas as pd
 import plotly
-import dash
 import plotly.express as px
 import plotly.subplots as sp
 import copy
@@ -13,7 +12,9 @@ import itertools
 import mlflow
 import shap
 import pickle
+import time
 from mlflow.sklearn import load_model
+
 
 # On load le modèle 
 model = load_model("banking_model_20230901135647")
@@ -163,6 +164,12 @@ def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_poin
         # on ajoute sous la forme d'un index
         index = index.insert(0, pd.Index([nomVar]))
         
+        
+        # On fait -1 pour inverser la contribution
+        # Négatif : Contribution négative à l'obtention du prêt
+        # Positif : Contribution positif à l'obtention du prêt
+        client[index] = client[index] * -1 
+        
         # Pour afficher les valeurs sur le graphiques
         texte_liste = round(client[index], 2).astype(str).values
         # Permet de standardiser la taille du nom des variables
@@ -189,7 +196,10 @@ def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_poin
         colors = [color_bar_selected if client[col] <= 0 else color_bar for col in client[index].index]
         figure_var.update_traces(marker_color=colors)
         
-        shape_global = {'nom': ["Résultat global"], 'valeur': round(client[1], 2)}
+        # On fait -1 pour inverser la contribution
+        # Négatif : Contribution négative à l'obtention du prêt
+        # Positif : Contribution positif à l'obtention du prêt
+        shape_global = {'nom': ["Résultat global"], 'valeur': round(client[1] * -1, 2)}
         figure_global = px.bar(shape_global,
                         x='valeur',
                         text='valeur',
@@ -199,7 +209,8 @@ def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_poin
         
         # On crée un subplot de 2 lignes, avec une différence de taille entre les 2 figures
         fig_general = sp.make_subplots(rows=2, cols=1, row_heights=[9, 1], shared_xaxes=True,
-                              subplot_titles=("Valeurs par variable", "Valeur globale"),
+                              subplot_titles=("Valeurs par variable", 
+                                              f"Valeur globale : {'Pas de prêt' if shape_global['valeur'] <= 0 else 'Prêt'}"),
                               vertical_spacing=0.1)
 
         # On ajoute la première figure en haut
@@ -235,6 +246,8 @@ def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_poin
         
 def return_dataframe_client(df, list_client):
     return df.loc[df.SK_ID_CURR.isin(list_client)]
+
+
 
 
 
@@ -328,13 +341,21 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
 
 ##### Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-app = Dash(__name__, external_stylesheets=external_stylesheets)
+app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
 server = app.server
-app.title = 'Sidebar'
 
-# App layout
-app.layout = html.Div([
-    
+app.title = 'Modèle de prédiction'
+
+temps_actuel = time.time()
+# Temps d'inactivité
+temps_inactivite = 5 * 60
+interval_check = 5*60*1000 # 5 minutes
+
+file_df = None
+file_df_client_score = None
+
+# Define the layout for the home page
+home_page = html.Div([ 
     # Titre dashboard
     html.Div(className='row', children="Utilisation du modèle pour prédire l'obtention d'un prêt",
              style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
@@ -349,9 +370,10 @@ app.layout = html.Div([
                 html.Button("Upload un fichier .csv", style={'color': 'black'})], multiple=False),
             html.Div(className='row', children="ou"),
             # Boutton pour upload les données tests
-            html.Button("Upload test.csv", id="test_file_button", n_clicks=0, style={'color': 'black'}),
+            html.Button("Upload test.csv", id="test_file_button", n_clicks=0, style={'color': 'black', 'margin-right': '10px'}),
+            # Boutton pour upload les données tests
+            html.Button(html.Strong("Effacer données"), id="del_file_button", n_clicks=0, style={'color': 'black'}),
     ]),   
-
     html.Hr(), # Ligne horizontale
     
         # Choix des clients
@@ -370,6 +392,9 @@ app.layout = html.Div([
         ),
         # On affiche les 2 tableaux
         html.Div(id="table_client"),
+        
+        html.Button(("Ajout de nouveaux clients"), id="new_client_button", n_clicks=0, style={'textAlign': 'left', 'color': 'black'}),
+        
         html.Div(className='row', children="Score de prédiction de l'obtention d'un prêt",
              style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
         html.Div(id="table_prediction"),
@@ -379,7 +404,7 @@ app.layout = html.Div([
             style={'textAlign': 'center', 'color': 'black', 'fontSize': 24}, children=[
                 html.Div(className='row', children = "Télécharger les fichiers de prédictions"),
                 # Boutton pour download les résultats 
-                html.Button("Result_prediction_all.csv", id="download-data_all-button", n_clicks = 0, style={'color': 'black'}),
+                html.Button("Result_prediction_all.csv", id="download-data_all-button", n_clicks = 0, style={'color': 'black', 'margin-right':'10px'}),
                 html.Button("Result_prediction_client.csv", id="download-data_client-button", n_clicks = 0, style={'color': 'black'}),
                 dcc.Download(id="download-data"),
         ]),  
@@ -425,7 +450,7 @@ app.layout = html.Div([
                         id='dropdown_client_var'
                 ),
             dcc.Graph(id="graph_client", style={'width': '100%', 'float': 'left'}),
-            
+         
         ]),
         # Choix des variables à représenter
         html.Div(className='variable-selection', 
@@ -450,13 +475,86 @@ app.layout = html.Div([
                 
             ],
         ),
+    # Nous permet de suivre l'activité utilisateur, si pas d'activité, élimination des données
+    dcc.Interval(
+        id='activity-interval',
+        interval=interval_check, 
+        n_intervals=0),
+    dcc.Store(id='clear-screen', data=False)
     ]),  
 ])
 
 
+# si nécessaire
+page_2 = html.Div([
+    dcc.Link("Retour à la page principale", href="/"),
+
+    html.P("En cours de construction"),
+])
+
+
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+
+    # Page content
+    html.Div(id='page-content'),
+])
+
+# Callback to update the page content based on the URL
 @app.callback(
+    Output('page-content', 'children'),
+    Input('url', 'pathname')
+)
+def display_page(pathname):
+    if pathname == '/page_2':
+        return page_2
+    else:
+        return home_page
+
+@app.callback(
+    Output(component_id="new_client_button", component_property="n_clicks"),
+    #Output(component_id="table_client", component_property="children"),
+    #Output(component_id="table_prediction", component_property="columns"),
+    
+    Input(component_id="new_client_button", component_property="n_clicks"),
+    State(component_id="table_client", component_property="children"),
+    #Input(component_id="table_prediction", component_property="columns"),
+    prevent_initial_call=True,
+)
+def update_table(n_clicks_new_client, table1_rows):  
+    
+    global temps_actuel
+    global file_df
+
+    # Si il y a une activité utilisateur, on consigne le temps
+    # On ne modifie pas le temps quand c'est activity-interval qui intervient
+    if ctx.triggered_id != "activity-interval":
+        temps_actuel = time.time()
+        
+    if (n_clicks_new_client == 1) & (file_df is not None) :
+        #new_row = {col: '' for col in file_df.iloc[:, :100].columns}
+        new_row = {col: '' for col in file_df.iloc[:, :100].columns}
+        table1_rows.append(dash_table.DataTable(
+            data=[new_row],
+            columns=[{'name': col, 'id': col} for col in file_df.iloc[:, :100].columns],
+            page_size=10,
+            style_table={'overflowX': 'auto'}
+        ))
+        n_clicks_new_client = 0
+        display(table1_rows)
+        return n_clicks_new_client#, table1_div#, table2 
+    
+    else:
+        return n_clicks_new_client#, table1_rows#, table2
+
+  
+    
+@app.callback(
+    Output(component_id="del_file_button", component_property="n_clicks"),
     Output(component_id="table_client", component_property="children"),
     Output(component_id="table_prediction", component_property="children"),
+    Output(component_id="dropdown_client", component_property="value"),
+    Output(component_id="dropdown_variable", component_property="value"),
     Output(component_id="graph_pred", component_property="figure"),
     Output(component_id="dropdown_variable", component_property="options"),
     Output(component_id="dropdown_client", component_property="options"),
@@ -472,6 +570,7 @@ app.layout = html.Div([
     Output(component_id="graph_client", component_property="figure"),
     Output(component_id="dropdown_client_var", component_property="options"),
     
+    Input(component_id="del_file_button", component_property="n_clicks"),
     Input(component_id="test_file_button", component_property="n_clicks"),
     Input(component_id="dropdown_client", component_property="value"),
     Input(component_id="variables_graph", component_property="value"),
@@ -484,15 +583,24 @@ app.layout = html.Div([
     Input(component_id="feature-importance-slider", component_property="value"),
     Input(component_id="download-data_all-button", component_property="n_clicks"),
     Input(component_id="download-data_client-button", component_property="n_clicks"),
-    Input(component_id="dropdown_client_var", component_property="value"),
+    Input(component_id="dropdown_client_var", component_property="value"),      
+    Input(component_id="activity-interval", component_property="n_intervals"), 
     
-    
+    State(component_id="clear-screen", component_property="data"),
 )
 
 
-
-def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, selected_variable, content, font_size, point_size, color_point, selected_affichage, variance_importance, n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_client_variable):
+def update_table_and_button(n_clicks_del, n_clicks_file, selected_client, scoring_choisie, selected_variable, content, font_size, point_size, color_point, selected_affichage, variance_importance, n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_client_variable, clear_statut, n_intervals):
     
+    global temps_actuel
+    global file_df
+    global file_df_client_score
+
+    # Si il y a une activité utilisateur, on consigne le temps
+    # On ne modifie pas le temps quand c'est activity-interval qui intervient
+    if ctx.triggered_id != "activity-interval":
+        temps_actuel = time.time()
+        
     # On défini des couleurs selon la condition
     if color_point == "plotly" :
         color_discrete_map = {"Pret": "blue", "Non pret": "red"}
@@ -500,9 +608,7 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
     #Développé par IBM, source : https://davidmathlogic.com/colorblind/)
     elif color_point == "colorblind" :
         color_discrete_map = {"Pret": '#648FFF', "Non pret": '#FFB000'}
-    
-    global file_df
-    global file_df_client_score
+      
     
     # On charge le fichier 
     if content is not None: 
@@ -517,7 +623,13 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
         
         # On remet la valeur par défaut pour permettre de nouveaux téléchargements
         content = None
-     
+        
+    # on efface les données
+    if n_clicks_del == 1:
+        file_df = None
+        file_df_client_score = None
+        n_clicks_del = 0
+    
     # On charge le fichier test.csv
     if n_clicks_file == 1:
         file_df = pd.read_csv("test.csv")
@@ -525,23 +637,27 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
         file_df = application_model(file_df, model, proba_threshold)
         file_df_client_score = feature_importance_client(file_df, model, explainer_model)
         n_clicks_file = 0
-        
+                                            
     # Par défaut, si aucun fichier de chargé
-    if file_df is None :
-        table1, table2 = dash_table.DataTable(), dash_table.DataTable()
+    if (file_df is None) or (clear_statut is True):
+        table1, table2 = dash_table.DataTable(editable=True), dash_table.DataTable(editable=True)
         figure_score, figure_variables, figure_feature_importance_client = px.scatter(height=0), px.scatter(height=0), px.bar(height=0)
         option_drop_var, option_drop_clients, option_drop_var_graph, option_client_variable = [], [], [], []
-        selected_affichage, content = None, None,
-        n_clicks_dl_file_all, n_clicks_dl_file_clients = 0, 0
+        selected_affichage, content = None, None
+        n_clicks_dl_file_all, n_clicks_dl_file_clients = 0, 0,
         figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", font_size, variance_importance, color_point, selected_variable)
+        selected_client, selected_variable = None, None
         
-        return (table1, table2, 
+        return (n_clicks_del,
+                table1, table2, 
+                selected_client, selected_variable,
                 figure_score, option_drop_var, 
                     option_drop_clients, option_drop_var_graph, 
                         selected_affichage, figure_variables, 
                             figure_feat_imp, n_clicks_file, content, 
                                 None, n_clicks_dl_file_all, 
-                                    n_clicks_dl_file_clients, figure_feature_importance_client, option_client_variable)
+                                    n_clicks_dl_file_clients, figure_feature_importance_client, option_client_variable,
+                                        )
     
     elif file_df is not None :
         # On met à jour la liste de dropdown
@@ -551,6 +667,10 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
         option_drop_var=[{'label': str(var), 'value': var} for var in [col for col in feat_imp_threshold]]
         option_drop_clients=[{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR']]
 
+        # Permet de vérifier que le fichier a bien fait les calcules, sinon on refait
+        if "prediction_pret" not in file_df.columns :
+            file_df = application_model(file_df, model, proba_threshold)
+        
         # On prend la colonne ID client et les dernières colonnes liées à la prédiction crédit
         cols = [0] + list(range(-6, 0))
 
@@ -559,12 +679,13 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
 
         if (type(selected_client) != list) & (selected_client is not None):
             selected_client = [selected_client]
-
+            
         if selected_client is None :
             table1 = dash_table.DataTable(
                 data=file_df.iloc[:, :100].to_dict('records'),
                 page_size=10,
-                style_table={'overflowX': 'auto'}
+                style_table={'overflowX': 'auto'},
+                editable=True
             )
             table2 = dash_table.DataTable(
                 data=file_df.iloc[:, cols].to_dict('records'),
@@ -576,7 +697,8 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
             table1 = dash_table.DataTable(
                 data=filtered_df.iloc[:, :100].to_dict('records'),
                 page_size=10,
-                style_table={'overflowX': 'auto'}
+                style_table={'overflowX': 'auto'},
+                editable=True
             )
             table2 = dash_table.DataTable(
                 data=filtered_df.iloc[:, cols].to_dict('records'),
@@ -796,29 +918,69 @@ def update_table_and_button(n_clicks_file, selected_client, scoring_choisie, sel
                 figure_feature_importance_client = figure_feature_client_dash(df1, df2, nb_variable = 10, color_point = color_point, size = font_size)            
  
         list_var_dl = ["SK_ID_CURR", "score", "score_note"]
+        # On ajoute la contribution des variables au score (% selon la contribution totale)
+        # Négative ou positive, selon l'outcome (Négatif si contribue à ne pas obtenir un prêt, positif inversement)
+        
+        # On mesure la contribution en pourcentage
+        contribution_pourcentage = round(file_df_client_score.apply(lambda x : ((x[2:]) / abs(x[2:]).sum()) * - 100, axis = 1), 2)
+        # on assemble les deux types d'informations
+        dl_file = pd.concat([file_df[list_var_dl], contribution_pourcentage],  axis = 1)
+        
         # On télécharge l'ensemble des données clients
         if n_clicks_dl_file_all > 0:
-            file_sent = dcc.send_data_frame(file_df[list_var_dl].to_csv, "Result_prediction_all.csv", index=False)
+            file_sent = dcc.send_data_frame(dl_file.to_csv, "Result_prediction_all.csv", index=False)
             n_clicks_dl_file_all = 0
         # On télécharge les données des clients sélectionnés
         elif n_clicks_dl_file_clients > 0 :
             # Safegard pour éviter toute erreur de téléchargement
             if selected_client is not None:
-                file_sent = dcc.send_data_frame(file_df.loc[file_df.SK_ID_CURR.isin(selected_client), list_var_dl].to_csv, "Result_prediction_client.csv", index=False)
+                file_sent = dcc.send_data_frame(dl_file.loc[dl_file.SK_ID_CURR.isin(selected_client), :].to_csv, "Result_prediction_client.csv", index=False)
             else:
                 file_sent = None
             n_clicks_dl_file_clients = 0
             
         else :
             file_sent = None
-        return (table1, table2, 
+            
+        return (n_clicks_del,
+                table1, table2, 
+                selected_client, selected_variable,
                 figure_score, option_drop_var, 
                     option_drop_clients, option_drop_var_graph, 
                         selected_affichage, figure_variables, 
                         figure_feat_imp, n_clicks_file, 
                             content, file_sent, 
                                 n_clicks_dl_file_all, n_clicks_dl_file_clients, 
-                                    figure_feature_importance_client, option_client_variable )
+                                    figure_feature_importance_client, option_client_variable,
+                                       )
+@app.callback(
+    Output(component_id="activity-interval", component_property="n_intervals"),
+    Input(component_id="activity-interval", component_property="n_intervals"), 
+    State(component_id="clear-screen", component_property="data"),
+    prevent_initial_call=True,
+)
+
+# Permet de surveiller l'activité utilisateur
+def inactivity(n_interval, clear_statut):
+    
+    global temps_actuel
+    global temps_utilisateur
+    global file_df
+    global file_df_client_score
+    
+    elapsed_time = time.time() - temps_actuel
+    
+    # Si l'utilisateur n'a rien réalisé dans les 5 - 10 dernières minutes, les données sont réinitialisées
+    if elapsed_time > (temps_inactivite) :
+
+        file_df = None
+        file_df_client_score = None
+        clear_statut = True
+        
+        # On réinstancie à 0
+        #update_table_and_button(1, 0, None, "score", None, None, 18, 8, "plotly", "strip", 0.9, 0, 0, None, clear_statut, n_interval)
+
+    return n_interval
 
 # Run the app
 if __name__ == '__main__':
