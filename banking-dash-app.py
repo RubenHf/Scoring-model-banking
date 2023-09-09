@@ -1,5 +1,5 @@
 import dash
-from dash import Dash, html, dash_table, dcc, callback, Output, Input, State, ctx
+from dash import Dash, html, dash_table, dcc, callback, Output, Input, State, ctx, Patch
 import pandas as pd
 import plotly
 import plotly.express as px
@@ -15,7 +15,6 @@ import pickle
 import time
 from mlflow.sklearn import load_model
 
-
 # On load le modèle 
 model = load_model("banking_model_20230901135647")
 
@@ -26,7 +25,6 @@ with open('explainer_model.pkl', 'rb') as explainer_file:
     explainer_model = pickle.load(explainer_file)
 # on charge les valeurs du modèle
 feature_importance = pd.read_csv("shap_values_model.csv") 
-
 
 def preparation_file(df, model):
     
@@ -96,7 +94,6 @@ def scoring_pret(df, threshold):
     
     return df
 
-
 def application_model(df, model, threshold):
     
     result_df = copy.deepcopy(df)
@@ -115,7 +112,6 @@ def application_model(df, model, threshold):
     result_df = scoring_pret(result_df, threshold)
 
     return result_df
-
 
 def feature_importance_client(df, model, explainer_model): 
     
@@ -247,11 +243,6 @@ def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_poin
 def return_dataframe_client(df, list_client):
     return df.loc[df.SK_ID_CURR.isin(list_client)]
 
-
-
-
-
-
 def feature_importance_threshold(df, feats, importance, variance_importance = 0.9):
 
     # On récupère le total
@@ -321,9 +312,9 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
             text = (
                     f"{mask.shape[0]} variable{'(s)' if mask.shape[0] > 1 else ''} "
                     f"contribue{'nt' if mask.shape[0] > 1 else ''} à expliquer "
-                    f"{variance_importance * 100} % du modèle"
+                    f"{round(variance_importance * 100)} % du modèle"
                 ),
-            font=dict(size=8+size, color="black"),
+            font=dict(size=4+size, color="black"),
             x=0.5,  # Center the title horizontally
             xanchor='center'
         ),
@@ -339,11 +330,182 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
     return figure
 
 
+def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, point_size, font_size):
+    
+    if scoring_var == "score" :
+        threshold = 0
+        textH = threshold + 5
+        textB = threshold - 5
+
+    elif scoring_var == "proba_pred_pret":
+        threshold = 1 - proba_threshold
+        textH = threshold + 0.05
+        textB = threshold - 0.05
+
+    if scoring_var in ["score", "proba_pred_pret"]:
+        figure_score = px.strip(df, y=scoring_var,
+                    # On fait figurer le nom des clients et leur note
+                    hover_data=["SK_ID_CURR", "score_note"],  
+                    # On établit la coloration selon la condition de prêt 
+                    color=df["prediction_pret"],  
+                    color_discrete_map=color_discrete_map
+                    # on actualise les valeurs de l'axe des x
+                    ).update_xaxes(range=[-0.5, 0.5], tickvals=[0]  
+
+                    # On ajoute une ligne horizontale
+                    ).add_shape(type="line", x0=-1, x1=1, y0=threshold, y1=threshold,
+                        line=dict(color="red", width=1)
+
+                    # On ajoute un texte au dessus de la ligne
+                    ).add_annotation(text="Threshold", x=-0.4, y=textH, showarrow=False,
+                        font=dict(color="red", size=20)
+
+                    # On ajoute un texte au dessus de la ligne              
+                    ).add_annotation(text="Prêt", x=0.4, y=textH, showarrow=False,
+                        font=dict(color="black", size=20)
+
+                    # On ajoute un texte en dessous de la ligne
+                    ).add_annotation(text="Non Prêt", x=0.4, y=textB, showarrow=False,
+                        font=dict(color="black", size=20)
+
+                    # On regroupe tout sur un seul tick
+                    ).update_traces(offsetgroup=0.5)
+        
+        figure_score.update_traces(marker = dict(size=point_size))
+        
+        if selected_client is not None :
+            selected_data_p = df[(df["SK_ID_CURR"].isin(selected_client)) & (df["prediction_pret"] == "Pret")]
+            selected_data_np = df[(df["SK_ID_CURR"].isin(selected_client)) & (df["prediction_pret"] == "Non pret")]
+        
+            for selected_data in [selected_data_p, selected_data_np]:
+                if not selected_data.empty:
+                    trace = px.strip(selected_data, y=scoring_var, color=selected_data["prediction_pret"], 
+                         color_discrete_map=color_discrete_map, hover_data=["SK_ID_CURR", "score_note"]
+                        ).update_traces(marker_size=point_size+18, name="Sélectionné(s)", 
+                                        marker_line_color="black", marker_line_width=2)
+                else :
+                    trace = px.strip()
+                    
+                figure_score.add_trace(trace.data[0]).update_traces(offsetgroup=0.5)
+                
+
+    else : 
+        nb_pret = df[df.prediction_pret == 'Pret'].shape[0]
+        nb_non_pret = df[df.prediction_pret == 'Non pret'].shape[0]
+        nb_max = df["score_note"].value_counts().max()
+
+        figure_score = px.histogram(df.sort_values("score_note"), x = "score_note",
+                    color=df.sort_values("score_note")["prediction_pret"],  
+                    color_discrete_map=color_discrete_map                       
+                        # On ajoute un texte au dessus de la ligne              
+                    ).add_annotation(text=f"Prêt (n={nb_pret})", x=1, y=nb_max, showarrow=False,
+                        font=dict(color="black", size=20)
+
+                    # On ajoute un texte en dessous de la ligne
+                    ).add_annotation(text=f"Non prêt (n={nb_non_pret})", x=20, y=nb_max, showarrow=False,
+                        font=dict(color="black", size=20))
+
+        figure_score.update_xaxes(title=dict(
+                    text = "Distribution des clients selont leur score note",
+                    font=dict(size=20, color="black"),
+                ))
+        figure_score.update_yaxes(title=dict(
+                    text = "Comptage (nombre de client(s))",
+                    font=dict(size=20, color="black"),
+                ))
+
+    figure_score.update_layout(font=dict(size=font_size, color="black"))
+    
+    return figure_score
+
+
+def figure_variable_dash(df, selected_variable, selected_client, selected_affichage, color_discrete_map, point_size, font_size):
+    # Initialisation
+    figure_variables = px.scatter()
+    
+    # On unpack
+    x_variable, y_variable = selected_variable
+    # Si une ou deux variables sont sélectionnées, on affiche soit un strip, soit un scatterplot
+    if x_variable is not None and df is not None:
+        hover_data = ["SK_ID_CURR", "score_note"]
+        color_column = df["prediction_pret"]
+
+        if y_variable is None:
+            if selected_affichage == "strip":
+                figure_variables = px.strip(df, y=x_variable, 
+                                            hover_data=hover_data, 
+                                            color=color_column, 
+                                            color_discrete_map=color_discrete_map).update_traces(offsetgroup=0.5)
+            elif selected_affichage == "boxplot":
+                figure_variables = px.box(df, y=x_variable, 
+                                          hover_data=hover_data, 
+                                          color=color_column, 
+                                          color_discrete_map=color_discrete_map)
+        elif y_variable is not None:
+            if selected_affichage == "scatter":
+                figure_variables = px.scatter(df, x=x_variable, y=y_variable, 
+                                              hover_data=hover_data, 
+                                              color=color_column, 
+                                              color_discrete_map=color_discrete_map)
+            elif selected_affichage == "density":
+                figure_variables = px.density_contour(df, x=x_variable, y=y_variable, 
+                                                      hover_data=hover_data, 
+                                                      color=color_column, 
+                                                      color_discrete_map=color_discrete_map)
+                
+        if figure_variables:
+            figure_variables.update_layout(font=dict(size=font_size, color="black"))
+            if selected_affichage != "density":
+                figure_variables.update_traces(marker=dict(size=point_size))
+                    
+        if selected_client is not None :
+            selected_data_p = df[(df["SK_ID_CURR"].isin(selected_client)) & (df["prediction_pret"] == "Pret")]
+            selected_data_np = df[(df["SK_ID_CURR"].isin(selected_client)) & (df["prediction_pret"] == "Non pret")]
+            
+            for selected_data in [selected_data_p, selected_data_np]:
+                
+                if not selected_data.empty:
+                    
+                    if y_variable is None:
+                        trace = px.strip(selected_data, y=x_variable, color=selected_data["prediction_pret"], 
+                        color_discrete_map=color_discrete_map, hover_data=hover_data
+                        ).update_traces(marker_size=point_size+18, name="Sélectionné(s)", 
+                                        marker_line_color="black", marker_line_width=2)
+
+                    elif y_variable is not None:
+                        trace = px.scatter(selected_data, x=x_variable, y=y_variable, color=selected_data["prediction_pret"], 
+                                           color_discrete_map=color_discrete_map, hover_data=hover_data
+                                          ).update_traces(marker_size=point_size+18, name="Sélectionné(s)", 
+                                                          marker_line_color="black", marker_line_width=2)
+                else :
+                    trace = px.strip()
+                if (y_variable is not None) or (selected_affichage == "boxplot"):
+                    figure_variables.add_trace(trace.data[0])
+                else:
+                    figure_variables.add_trace(trace.data[0]).update_traces(offsetgroup=0.5)
+        
+
+    return figure_variables
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ##### Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
-server = app.server
 
+app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
+
+server = app.server
 app.title = 'Modèle de prédiction'
 
 temps_actuel = time.time()
@@ -358,8 +520,8 @@ file_df_client_score = None
 home_page = html.Div([ 
     # Titre dashboard
     html.Div(className='row', children="Utilisation du modèle pour prédire l'obtention d'un prêt",
-             style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
-    html.Hr(), # Ligne horizontale
+             style={'textAlign': 'center', 'color': 'black', 'fontSize': 48}),
+    html.Hr(style={'border-top': '4px solid black'}), # Ligne horizontale
     
     # Upload liste de clients et leur caractéristiques
     html.Div(className='row',
@@ -374,115 +536,170 @@ home_page = html.Div([
             # Boutton pour upload les données tests
             html.Button(html.Strong("Effacer données"), id="del_file_button", n_clicks=0, style={'color': 'black'}),
     ]),   
-    html.Hr(), # Ligne horizontale
+    html.Hr(style={'border-top': '1px solid black'}), # Ligne horizontale
     
         # Choix des clients
-    html.Div(className='row', children=[
-        html.Div(className='client-selection', children=[
-                html.Div("Choix d'un client :",
-                         style={'textAlign': 'left', 'color': 'black', 'fontSize': 18}),
-                dcc.Dropdown(
-                        value=None,
-                        style={'textAlign': 'left', 'color': 'black', 'fontSize': 15},
-                        placeholder="Sélection client(s)",
-                        multi=True,
-                        id='dropdown_client'
-                ),
-            ],
-        ),
-        # On affiche les 2 tableaux
-        html.Div(id="table_client"),
-        
-        html.Button(("Ajout de nouveaux clients"), id="new_client_button", n_clicks=0, style={'textAlign': 'left', 'color': 'black'}),
-        
-        html.Div(className='row', children="Score de prédiction de l'obtention d'un prêt",
-             style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
-        html.Div(id="table_prediction"),
-        
-            # Upload liste de clients et leur caractéristiques
-        html.Div(className='row',
-            style={'textAlign': 'center', 'color': 'black', 'fontSize': 24}, children=[
-                html.Div(className='row', children = "Télécharger les fichiers de prédictions"),
-                # Boutton pour download les résultats 
-                html.Button("Result_prediction_all.csv", id="download-data_all-button", n_clicks = 0, style={'color': 'black', 'margin-right':'10px'}),
-                html.Button("Result_prediction_client.csv", id="download-data_client-button", n_clicks = 0, style={'color': 'black'}),
-                dcc.Download(id="download-data"),
-        ]),  
-        
-        html.Hr(), # Ligne horizontale
-        # On affiche les différents graphs liés au résultat du modèle
-        html.Div(className="figure_client", children=[
-            # Option pour la taille des polices et des points
-            html.Label("Taille police (axes et valeurs)"),
+
+    html.Div(className='client-selection', children=[
+            html.Div("Visualisez les résultats de prédiction de prêt sur l'ensemble de vos clients (ou sélectionnés):",
+                     style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
+            dcc.Dropdown(
+                    value=None,
+                    style={'textAlign': 'left', 'color': 'black', 'fontSize': 15},
+                    placeholder="Sélection client(s)",
+                    multi=True,
+                    id='dropdown_client'
+            ),
+        ],
+    ),
+    
+    # On affiche les 2 tableaux
+    html.Div([
+        html.Div("Visualisation des données", style={'float': 'center', 'textAlign': 'center', 'color': 'black', 'fontSize': 24, 'width': '50%'}),
+        html.Div("Score de prédiction de l'obtention d'un prêt", style={'float': 'center', 'textAlign': 'center', 'color': 'black', 'fontSize': 24, 'width': '50%'}),
+    ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
+    
+    html.Div([
+        html.Div(id="table_client", style={'width': '50%','margin-right': '10px'}),
+        html.Div(id="table_prediction", style={'width': '50%', 'margin-left': '50px'}),
+    ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
+   
+
+        # Upload liste de clients et leur caractéristiques
+    html.Div(className='row',
+        style={'textAlign': 'center', 'color': 'black', 'fontSize': 24}, children=[
+            html.Div(className='row', children = "Télécharger les fichiers de prédictions"),
+            # Boutton pour download les résultats 
+            html.Button("Result_prediction_all.csv", id="download-data_all-button", n_clicks = 0, style={'color': 'black', 'margin-right':'10px'}),
+            html.Button("Result_prediction_client.csv", id="download-data_client-button", n_clicks = 0, style={'color': 'black'}),
+            dcc.Download(id="download-data"),
+    ]),  
+
+    html.Hr(style={'border-top': '1px solid black'}), # Ligne horizontale
+
+
+    html.Div(className="figure_client", children=[
+        html.Div(className='row', children="Options d'affichages",
+            style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
+        # Option pour la taille des polices, des points et couleurs graphiques
+        html.Div([
+            html.Label("Taille police (axes et valeurs)", style={'textAlign': 'center'}),
             dcc.Slider(id='font-size-slider', min=18, max=36, step=2, value=18,
-                marks={i: str(i) for i in range(18, 37, 2)}),
-            html.Label("Taille points (graphique)"),
+                marks={i: str(i) for i in range(18, 37, 2)})
+        ], style={'width': '50%', 'float': 'left', 'margin': '0 auto'}),
+
+        html.Div([
+            html.Label("Taille points (graphique)", style={'textAlign': 'center'}),
             dcc.Slider(id='point-size-slider', min=4, max=16, step=2, value=8,
-                marks={i: str(i) for i in range(4, 17, 2)}),
-            # Option pour la palette de couleur
-            html.Label("Sélectionnez une couleur de palette :"),
+                marks={i: str(i) for i in range(4, 17, 2)})
+        ], style={'width': '50%', 'float': 'right', 'margin': '0 auto'}),
+
+        html.Div([
+            html.Label("Palette de couleurs :"),
             dcc.RadioItems(id='color-palette-dropdown',
-                style={'textAlign': 'left', 'color': 'black', 'fontSize': 15},
+                style={'color': 'black', 'fontSize': 15},
+                value='plotly', inline=True,
                 options=[
                     {'label': 'Défaut', 'value': 'plotly'},
-                    {'label': 'Daltonien', 'value': 'colorblind'}],
-                value='plotly', inline=True),
-            html.Div(className='row', children="Représentation des clients :",
-             style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
-            html.Label("Sélectionnez une métrique de score :"),
-            dcc.RadioItems(id='variables_graph', 
-                style={'textAlign': 'left', 'color': 'black', 'fontSize': 15},
+                    {'label': 'Daltonien', 'value': 'colorblind'}
+                ]
+            ),
+        ], style={'textAlign': 'center', 'width': '100%'})
+    ]),
+
+
+        html.Hr(style={'border-top': '1px solid black'}), # Ligne horizontale
+
+
+    # Choix des variables à représenter
+        html.Div("Afficher la distribution des scores et des variables définissant les clients",
+         style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
+        html.Div([
+            html.Label("Sélectionnez une métrique de score :", 
+                style={'textAlign': 'center', 'color': 'black', 'fontSize': 15}),
+            dcc.RadioItems(id='dropdown_scoring', 
+                style={'textAlign': 'center', 'color': 'black', 'fontSize': 15},
                 options=[
                     {'label': 'Score', 'value': 'score'},
                     {'label': 'Proba_pred_pret', 'value': 'proba_pred_pret'},
                     {'label': 'Score_note', 'value': 'score_note'}],
-                value='score', inline=True),
-            dcc.Graph(id="graph_pred", style={'height': '600px', 'width': '100%', 'float': 'left'}),
-            html.Label("Importances des variables pour le modèle (défaut = 0.9)"),
+                value='score', inline=True)],
+            style={'width': '50%', 'float': 'left'}),
+
+        html.Div([
+            html.Div([
+                dcc.Dropdown(
+                    value=None,
+                    style={'textAlign': 'center', 'color': 'black', 'fontSize': 15},
+                    placeholder="Sélection variable (abscisse)",
+                    multi=False,
+                    id='dropdown_variable_x'
+                )
+            ], style={'width': '50%', 'display': 'inline-block'}),
+
+            html.Div([
+                dcc.Dropdown(
+                    value=None,
+                    style={'textAlign': 'center', 'color': 'black', 'fontSize': 15},
+                    placeholder="Sélection variable (ordonné)",
+                    multi=False,
+                    id='dropdown_variable_y'
+                )
+            ], style={'width': '50%', 'display': 'inline-block'}),
+             
+            html.Button("⇐ Echanger ⇒", id='exchange-button', n_clicks=0),
+            
+            dcc.RadioItems(id='dropdown_fig_type', 
+                style={'textAlign': 'center', 'color': 'black', 'fontSize': 15},
+                options=[
+                    {'label': 'Strip', 'value': 'strip'},
+                    {'label': 'Boxplot', 'value': 'boxplot'}],
+                value='strip', inline=True)], style={'width': '50%', 'float': 'right'}),
+
+        html.Div([
+        dcc.Graph(id="graph_pred", style={'height': '600px', 'width': '50%', 'float': 'left'}),
+
+        dcc.Graph(id="graph_variables", style={'height': '600px', 'width': '50%', 'float': 'right'}),
+
+        ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
+        
+         
+        html.Hr(style={'border-top': '1px solid black'}), # Ligne horizontale
+        html.Div(className='row', children="Information sur le modèle et les clients",
+            style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
+        
+        html.Div([ 
+            html.Label("Importances des variables pour le modèle (défaut = 0.9)", 
+            style={'textAlign': 'center', 'color': 'black', 'fontSize': 18}),
+            
             dcc.Slider(id='feature-importance-slider', min=0, max=1, step=0.05, value=0.9,
                 marks={i: str(round(i, 2)) for i in np.arange(0, 1.01, 0.05)}),
-            dcc.Graph(id="graph_model", style={'width': '100%', 'float': 'left'}),
+        ], style={'width': '50%', 'float': 'left'}),
+        
+        html.Div([
             dcc.Dropdown(
-                        value=None,
-                        style={'textAlign': 'left', 'color': 'black', 'fontSize': 15},
-                        placeholder="Sélection client parmis les clients sélectionnés",
-                        multi=False,
-                        id='dropdown_client_var'
-                ),
-            dcc.Graph(id="graph_client", style={'width': '100%', 'float': 'left'}),
-         
-        ]),
-        # Choix des variables à représenter
-        html.Div(className='variable-selection', 
-            children=[
-                html.Div("Afficher la distribution des variables définissant les clients",
-                         style={'textAlign': 'center', 'color': 'black', 'fontSize': 18}),
-                dcc.RadioItems(id='dropdown_fig_type', 
-                    style={'textAlign': 'left', 'color': 'black', 'fontSize': 15},
-                    options=[
-                        {'label': 'Strip', 'value': 'strip'},
-                        {'label': 'Boxplot', 'value': 'boxplot'}],
-                    value='strip', inline=True),
-                dcc.Dropdown(
-                        value=None,
-                        style={'textAlign': 'left', 'color': 'black', 'fontSize': 15},
-                        placeholder="Sélection variable(s) (2 maximum)",
-                        multi=True,
-                        id='dropdown_variable'
-                ),
-                
-                dcc.Graph(id="graph_variables", style={'height': '600px', 'width': '100%', 'float': 'left'}),
-                
-            ],
-        ),
+                style={'textAlign': 'center','color': 'black','fontSize': 15,  'float': 'center'},
+                placeholder="Sélection client parmis les clients sélectionnés (1 client maximum)",
+                value=None, multi=False, id='dropdown_client_var'
+            ),
+        ], style={'width': '50%', 'float': 'right', 'margin': '0 auto'}),
+        
+        html.Div([
+            dcc.Graph(id="graph_model", style={'width': '50%', 'float': 'left'}),
+        
+            dcc.Graph(id="graph_client", style={'width': '50%', 'float': 'right'}),
+        ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
+        
     # Nous permet de suivre l'activité utilisateur, si pas d'activité, élimination des données
     dcc.Interval(
         id='activity-interval',
         interval=interval_check, 
         n_intervals=0),
-    dcc.Store(id='clear-screen', data=False)
-    ]),  
-])
+    dcc.Store(id='clear-screen', data=False),
+    dcc.Store(id='initialize_figure_model', data=False),
+    dcc.Store(id='donnees-fichier', data=None),    
+
+]),
 
 
 # si nécessaire
@@ -510,87 +727,24 @@ def display_page(pathname):
         return page_2
     else:
         return home_page
+    
 
-@app.callback(
-    Output(component_id="new_client_button", component_property="n_clicks"),
-    #Output(component_id="table_client", component_property="children"),
-    #Output(component_id="table_prediction", component_property="columns"),
-    
-    Input(component_id="new_client_button", component_property="n_clicks"),
-    State(component_id="table_client", component_property="children"),
-    #Input(component_id="table_prediction", component_property="columns"),
-    prevent_initial_call=True,
-)
-def update_table(n_clicks_new_client, table1_rows):  
-    
-    global temps_actuel
-    global file_df
-
-    # Si il y a une activité utilisateur, on consigne le temps
-    # On ne modifie pas le temps quand c'est activity-interval qui intervient
-    if ctx.triggered_id != "activity-interval":
-        temps_actuel = time.time()
-        
-    if (n_clicks_new_client == 1) & (file_df is not None) :
-        #new_row = {col: '' for col in file_df.iloc[:, :100].columns}
-        new_row = {col: '' for col in file_df.iloc[:, :100].columns}
-        table1_rows.append(dash_table.DataTable(
-            data=[new_row],
-            columns=[{'name': col, 'id': col} for col in file_df.iloc[:, :100].columns],
-            page_size=10,
-            style_table={'overflowX': 'auto'}
-        ))
-        n_clicks_new_client = 0
-        display(table1_rows)
-        return n_clicks_new_client#, table1_div#, table2 
-    
-    else:
-        return n_clicks_new_client#, table1_rows#, table2
-
-  
-    
-@app.callback(
+@app.callback(    
     Output(component_id="del_file_button", component_property="n_clicks"),
-    Output(component_id="table_client", component_property="children"),
-    Output(component_id="table_prediction", component_property="children"),
-    Output(component_id="dropdown_client", component_property="value"),
-    Output(component_id="dropdown_variable", component_property="value"),
-    Output(component_id="graph_pred", component_property="figure"),
-    Output(component_id="dropdown_variable", component_property="options"),
-    Output(component_id="dropdown_client", component_property="options"),
-    Output(component_id="dropdown_fig_type", component_property="options"),
-    Output(component_id="dropdown_fig_type", component_property="value"),
-    Output(component_id="graph_variables", component_property="figure"),
-    Output(component_id="graph_model", component_property="figure"),
     Output(component_id="test_file_button", component_property="n_clicks"),
     Output(component_id="upload-data", component_property="contents"),
-    Output(component_id="download-data", component_property="data"),
-    Output(component_id="download-data_all-button", component_property="n_clicks"),
-    Output(component_id="download-data_client-button", component_property="n_clicks"),
-    Output(component_id="graph_client", component_property="figure"),
-    Output(component_id="dropdown_client_var", component_property="options"),
+    Output(component_id="donnees-fichier", component_property="data"),
     
     Input(component_id="del_file_button", component_property="n_clicks"),
     Input(component_id="test_file_button", component_property="n_clicks"),
-    Input(component_id="dropdown_client", component_property="value"),
-    Input(component_id="variables_graph", component_property="value"),
-    Input(component_id="dropdown_variable", component_property="value"),
-    Input(component_id="upload-data", component_property="contents"),    
-    Input(component_id="font-size-slider", component_property="value"), 
-    Input(component_id="point-size-slider", component_property="value"),
-    Input(component_id="color-palette-dropdown", component_property="value"),
-    Input(component_id="dropdown_fig_type", component_property="value"),
-    Input(component_id="feature-importance-slider", component_property="value"),
-    Input(component_id="download-data_all-button", component_property="n_clicks"),
-    Input(component_id="download-data_client-button", component_property="n_clicks"),
-    Input(component_id="dropdown_client_var", component_property="value"),      
+    Input(component_id="upload-data", component_property="contents"),  
     Input(component_id="activity-interval", component_property="n_intervals"), 
-    
-    State(component_id="clear-screen", component_property="data"),
+    Input(component_id="donnees-fichier", component_property="data"),
+    prevent_initial_call=True,
 )
 
-
-def update_table_and_button(n_clicks_del, n_clicks_file, selected_client, scoring_choisie, selected_variable, content, font_size, point_size, color_point, selected_affichage, variance_importance, n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_client_variable, clear_statut, n_intervals):
+# Téléchargement des fichiers
+def gestion_files(n_clicks_del_file, n_clicks_load_file, content, n_interval, file):
     
     global temps_actuel
     global file_df
@@ -599,18 +753,9 @@ def update_table_and_button(n_clicks_del, n_clicks_file, selected_client, scorin
     # Si il y a une activité utilisateur, on consigne le temps
     # On ne modifie pas le temps quand c'est activity-interval qui intervient
     if ctx.triggered_id != "activity-interval":
-        temps_actuel = time.time()
+        temps_actuel = time.time()     
         
-    # On défini des couleurs selon la condition
-    if color_point == "plotly" :
-        color_discrete_map = {"Pret": "blue", "Non pret": "red"}
-    
-    #Développé par IBM, source : https://davidmathlogic.com/colorblind/)
-    elif color_point == "colorblind" :
-        color_discrete_map = {"Pret": '#648FFF', "Non pret": '#FFB000'}
-      
-    
-    # On charge le fichier 
+    # On charge un fichier csv 
     if content is not None: 
         content_type, content_string = content.split(",")
         decoded = base64.b64decode(content_string)
@@ -623,176 +768,141 @@ def update_table_and_button(n_clicks_del, n_clicks_file, selected_client, scorin
         
         # On remet la valeur par défaut pour permettre de nouveaux téléchargements
         content = None
-        
-    # on efface les données
-    if n_clicks_del == 1:
-        file_df = None
-        file_df_client_score = None
-        n_clicks_del = 0
+        file = True
     
     # On charge le fichier test.csv
-    if n_clicks_file == 1:
+    if n_clicks_load_file == 1:
         file_df = pd.read_csv("test.csv")
         # On mesure les différentes métriques
         file_df = application_model(file_df, model, proba_threshold)
         file_df_client_score = feature_importance_client(file_df, model, explainer_model)
-        n_clicks_file = 0
-                                            
+        n_clicks_load_file = 0
+        file = True
+    # on efface les données
+    if n_clicks_del_file == 1:
+        file_df = None
+        file_df_client_score = None
+        n_clicks_del_file = 0
+        file = None
+    # On trigger 
+ #   affichage_tab_clients(None, 0)
+    
+    return n_clicks_del_file, n_clicks_load_file, content, file
+
+
+@app.callback(
+
+    Output(component_id="dropdown_client", component_property="options"),
+    Output(component_id="dropdown_variable_x", component_property="options"),
+    Output(component_id="dropdown_variable_y", component_property="options"),
+    Output(component_id="dropdown_fig_type", component_property="options"),
+    Output(component_id="dropdown_client_var", component_property="options"),
+    
+    Output(component_id="dropdown_client", component_property="value"),
+    Output(component_id="dropdown_variable_x", component_property="value"),
+    Output(component_id="dropdown_variable_y", component_property="value"),
+    Output(component_id="dropdown_fig_type", component_property="value"),
+    Output(component_id="exchange-button", component_property="n_clicks"),
+
+    Input(component_id="dropdown_client", component_property="value"),
+    Input(component_id="dropdown_variable_x", component_property="value"),
+    Input(component_id="dropdown_variable_y", component_property="value"),
+    Input(component_id="dropdown_fig_type", component_property="value"),
+    Input(component_id="dropdown_client_var", component_property="value"),   
+    Input(component_id="feature-importance-slider", component_property="value"),   
+    Input(component_id="activity-interval", component_property="n_intervals"), 
+    Input(component_id="clear-screen", component_property="data"),
+    Input(component_id="donnees-fichier", component_property="data"),
+    Input(component_id="exchange-button", component_property="n_clicks"),
+    
+)
+
+
+def update_dropdown_menu(selected_client, selected_variable_x, selected_variable_y, selected_affichage, selected_client_variable, variance_importance, n_intervals, clear_statut, file, n_click_echange):
+    
+    global temps_actuel
+    global file_df
+    global file_df_client_score
+
+    # Si il y a une activité utilisateur, on consigne le temps
+    # On ne modifie pas le temps quand c'est activity-interval qui intervient
+    if ctx.triggered_id != "activity-interval":
+        temps_actuel = time.time()
+    
+    if ctx.triggered_id == "exchange-button":
+        # Remise à 0 du boutton
+        n_click_echange = 0
+        # On empêche l'actualisation des autres
+        (option_drop_clients, option_drop_var_graph, option_client_variable,
+                selected_client, selected_affichage) = [dash.no_update,
+        dash.no_update,dash.no_update,dash.no_update,dash.no_update]
+        
+        # on vérifie qu'on a bien 2 variables d'entrées
+        if selected_variable_y is not None :
+            temp = selected_variable_x
+            selected_variable_x = selected_variable_y
+            selected_variable_y = temp
+            
+            # On réactualise la liste du drop
+            feat_imp_threshold = feature_importance_threshold(feature_importance, "Features", "Importance", variance_importance).Features.values
+            option_drop_var_x=[{'label': str(var), 'value': var} for var in [col for col in feat_imp_threshold]]
+            option_drop_var_y=[{'label': str(var), 'value': var} for var in 
+                               [col for col in feat_imp_threshold if col != selected_variable_x]]
+        else :
+            selected_variable_x, selected_variable_y = dash.no_update, dash.no_update
+            option_drop_var_x, option_drop_var_y = dash.no_update, dash.no_update
+            
+        return (option_drop_clients, option_drop_var_x, option_drop_var_y, option_drop_var_graph, option_client_variable,
+                selected_client, selected_variable_x, selected_variable_y, selected_affichage, n_click_echange)
+    
     # Par défaut, si aucun fichier de chargé
     if (file_df is None) or (clear_statut is True):
-        table1, table2 = dash_table.DataTable(editable=True), dash_table.DataTable(editable=True)
-        figure_score, figure_variables, figure_feature_importance_client = px.scatter(height=0), px.scatter(height=0), px.bar(height=0)
-        option_drop_var, option_drop_clients, option_drop_var_graph, option_client_variable = [], [], [], []
-        selected_affichage, content = None, None
-        n_clicks_dl_file_all, n_clicks_dl_file_clients = 0, 0,
-        figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", font_size, variance_importance, color_point, selected_variable)
-        selected_client, selected_variable = None, None
         
-        return (n_clicks_del,
-                table1, table2, 
-                selected_client, selected_variable,
-                figure_score, option_drop_var, 
-                    option_drop_clients, option_drop_var_graph, 
-                        selected_affichage, figure_variables, 
-                            figure_feat_imp, n_clicks_file, content, 
-                                None, n_clicks_dl_file_all, 
-                                    n_clicks_dl_file_clients, figure_feature_importance_client, option_client_variable,
-                                        )
-    
+        return ([], [], [], [], [], None, None, None, None, 0)
+        
     elif file_df is not None :
         # On met à jour la liste de dropdown
         # La liste de variable est dépendante de la liste de feature importance
 
         feat_imp_threshold = feature_importance_threshold(feature_importance, "Features", "Importance", variance_importance).Features.values
-        option_drop_var=[{'label': str(var), 'value': var} for var in [col for col in feat_imp_threshold]]
-        option_drop_clients=[{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR']]
+        # Liste de variables (dépend des features liés au threshold du modèle)
+        option_drop_var_x=[{'label': str(var), 'value': var} for var in [col for col in feat_imp_threshold]]
+        option_drop_var_y=[]
+        # Liste des clients selon le fichier loadé
+        option_drop_clients=[{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR']]      
 
-        # Permet de vérifier que le fichier a bien fait les calcules, sinon on refait
-        if "prediction_pret" not in file_df.columns :
-            file_df = application_model(file_df, model, proba_threshold)
-        
-        # On prend la colonne ID client et les dernières colonnes liées à la prédiction crédit
-        cols = [0] + list(range(-6, 0))
+        # On revient à la condition initiale
+        selected_client = None if selected_client == [] else selected_client
 
-        if selected_client == []:
-            selected_client = None
-
+        # On transforme en liste
         if (type(selected_client) != list) & (selected_client is not None):
             selected_client = [selected_client]
-            
-        if selected_client is None :
-            table1 = dash_table.DataTable(
-                data=file_df.iloc[:, :100].to_dict('records'),
-                page_size=10,
-                style_table={'overflowX': 'auto'},
-                editable=True
-            )
-            table2 = dash_table.DataTable(
-                data=file_df.iloc[:, cols].to_dict('records'),
-                page_size=10,
-                style_table={'overflowX': 'auto'}
-            )
-        else :
-            filtered_df = file_df[file_df['SK_ID_CURR'].isin(selected_client)]
-            table1 = dash_table.DataTable(
-                data=filtered_df.iloc[:, :100].to_dict('records'),
-                page_size=10,
-                style_table={'overflowX': 'auto'},
-                editable=True
-            )
-            table2 = dash_table.DataTable(
-                data=filtered_df.iloc[:, cols].to_dict('records'),
-                page_size=10,
-                style_table={'overflowX': 'auto'}
-            )
 
-        if scoring_choisie == "score" :
-            threshold = 0
-            textH = threshold + 5
-            textB = threshold - 5
+            # On place en premier ceux qui ont été sélectionnés
+        option_client_variable = []
 
-        elif scoring_choisie == "proba_pred_pret":
-            threshold = 1 - proba_threshold
-            textH = threshold + 0.05
-            textB = threshold - 0.05
- 
-        if scoring_choisie in ["score", "proba_pred_pret"]:
-            figure_score = px.strip(file_df, y=scoring_choisie,
-                        # On fait figurer le nom des clients et leur note
-                        hover_data=["SK_ID_CURR", "score_note"],  
-                        # On établit la coloration selon la condition de prêt 
-                        color=file_df["prediction_pret"],  
-                        color_discrete_map=color_discrete_map
-                        # on actualise les valeurs de l'axe des x
-                        ).update_xaxes(range=[-0.5, 0.5], tickvals=[0]  
-
-                        # On ajoute une ligne horizontale
-                        ).add_shape(type="line", x0=-1, x1=1, y0=threshold, y1=threshold,
-                            line=dict(color="red", width=1)
-
-                        # On ajoute un texte au dessus de la ligne
-                        ).add_annotation(text="Threshold", x=-0.4, y=textH, showarrow=False,
-                            font=dict(color="red", size=20)
-
-                        # On ajoute un texte au dessus de la ligne              
-                        ).add_annotation(text="Prêt", x=0.4, y=textH, showarrow=False,
-                            font=dict(color="black", size=20)
-
-                        # On ajoute un texte en dessous de la ligne
-                        ).add_annotation(text="Non Prêt", x=0.4, y=textB, showarrow=False,
-                            font=dict(color="black", size=20)
-
-                        # On regroupe tout sur un seul tick
-                        ).update_traces(offsetgroup=0.5)
-            figure_score.update_traces(marker = dict(size=point_size))
-            
-        else : 
-            nb_pret = file_df[file_df.prediction_pret == 'Pret'].shape[0]
-            nb_non_pret = file_df[file_df.prediction_pret == 'Non pret'].shape[0]
-            nb_max = file_df["score_note"].value_counts().max()
-            
-            figure_score = px.histogram(file_df.sort_values("score_note"), x = "score_note",
-                        color=file_df.sort_values("score_note")["prediction_pret"],  
-                        color_discrete_map=color_discrete_map                       
-                            # On ajoute un texte au dessus de la ligne              
-                        ).add_annotation(text=f"Prêt (n={nb_pret})", x=1, y=nb_max, showarrow=False,
-                            font=dict(color="black", size=20)
-
-                        # On ajoute un texte en dessous de la ligne
-                        ).add_annotation(text=f"Non prêt (n={nb_non_pret})", x=20, y=nb_max, showarrow=False,
-                            font=dict(color="black", size=20))
-
-            figure_score.update_xaxes(title=dict(
-                        text = "Distribution des clients selont leur score note",
-                        font=dict(size=20, color="black"),
-                    ))
-            figure_score.update_yaxes(title=dict(
-                        text = "Comptage (nombre de client(s))",
-                        font=dict(size=20, color="black"),
-                    ))
-
-        figure_score.update_layout(font=dict(size=font_size, color="black"))
-        
-        # On revient à la condition initiale
-        selected_variable = None if selected_variable == [] else selected_variable
+        if selected_client is not None:
+            option_client_variable.extend([{'label': str(client), 'value': client} for client in selected_client])
+            option_client_variable.extend([{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR'] if client not in selected_client])
+        else :     
+            option_client_variable.extend([{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR']])
 
         # Si aucune variable n'est sélectionnée, nous n'affichons rien
-        if selected_variable == None:
-            figure_variables = px.scatter()
-            figure_feature_importance_client = px.bar()
+        if selected_variable_x == None:
+            
+            # Pas de valeur en ordonnée 
+            selected_variable_y = None
+            
             option_drop_var_graph = []
-            option_client_variable = []
             selected_affichage = None
 
         # Si une ou deux variables sont sélectionnées, on affiche soit un strip, soit un scatterplot
-        elif (type(selected_variable) == list) :
+        elif selected_variable_x is not None:
+            # On met à jour la liste de variable, sans sélectionné la variable en x
+            option_drop_var_y=[{'label': str(var), 'value': var} for var in 
+                               [col for col in feat_imp_threshold if col != selected_variable_x]]
             
-            figure_variables = px.scatter()
-            figure_feature_importance_client = px.bar()
-            option_drop_var_graph = []
-            option_client_variable = []
-                
-            if len(selected_variable) == 1 :
+            if selected_variable_y is None :
                 # On met à jour les options d'affichages pour une variable
                 option_drop_var_graph=[
                         {'label': 'Strip', 'value': 'strip'},
@@ -800,162 +910,23 @@ def update_table_and_button(n_clicks_del, n_clicks_file, selected_client, scorin
                 if(selected_affichage not in ["strip", "boxplot"]):
                     selected_affichage = "strip"
                 
-                # Type d'affichage
-                if selected_affichage == "strip":
-                    figure_variables = px.strip(file_df, y=selected_variable[0],
-                        # On fait figurer le nom des clients et leur note
-                        hover_data=["SK_ID_CURR", "score_note"],  
-                        # On établit la coloration selon la condition de prêt 
-                        color=file_df["prediction_pret"],  
-                        color_discrete_map=color_discrete_map
-                        # On regroupe tout sur un seul tick
-                        ).update_traces(offsetgroup=0.5)
-                    
-                elif selected_affichage == "boxplot":
-                    figure_variables = px.box(file_df, y=selected_variable[0],
-                        # On fait figurer le nom des clients et leur note
-                        hover_data=["SK_ID_CURR", "score_note"],  
-                        # On établit la coloration selon la condition de prêt 
-                        color=file_df["prediction_pret"],  
-                        color_discrete_map=color_discrete_map
-                        )
             else :
-                
                 # On met à jour les options d'affichages pour deux variables
                 option_drop_var_graph=[
                         {'label': 'Scatterplot', 'value': 'scatter'},
                         {'label': 'Densité', 'value': 'density'}]
                 if(selected_affichage not in ["scatter", "density"]):
-                    selected_affichage = "scatter"
+                    selected_affichage = "scatter" 
+
                 
-                # Type d'affichage
-                if selected_affichage == "scatter":
-                    figure_variables = px.scatter(file_df, x=selected_variable[0], y = selected_variable[1],
-                            hover_data=["SK_ID_CURR", "score_note"],  
-                            color=file_df["prediction_pret"], color_discrete_map=color_discrete_map)
-                else :    
-                    figure_variables = px.density_contour(file_df, x=selected_variable[0], y = selected_variable[1],
-                        hover_data=["SK_ID_CURR", "score_note"],  
-                        color=file_df["prediction_pret"], color_discrete_map=color_discrete_map)
-                    
-            figure_variables.update_layout(font=dict(size=font_size, color="black"))
-            if selected_affichage != "density":
-                figure_variables.update_traces(marker=dict(size=point_size))
-
-        if (type(selected_client) == list) and (selected_client is not None) and (scoring_choisie != "score_note"):
-            # On met à jour les graphiques avec les clients sélectionnés
-            selected_data_p = file_df[(file_df["SK_ID_CURR"].isin(selected_client)) & (file_df["prediction_pret"] == "Pret")]
-            selected_data_np = file_df[(file_df["SK_ID_CURR"].isin(selected_client)) & (file_df["prediction_pret"] == "Non pret")]
-
-            # En créant une nouvelle trace
-            if not selected_data_p.empty:
-                # Mise à jour du graphique score avec les clients sélectionnés
-                selected_trace_p = px.strip(selected_data_p, y=scoring_choisie,  
-                                 color=selected_data_p["prediction_pret"], color_discrete_map=color_discrete_map,
-                                 hover_data=["SK_ID_CURR", "score_note"],
-                                 ).update_traces(marker_size=point_size+18, name = "Sélectionné(s)",
-                                                marker_line_color="black", marker_line_width=2)
-                figure_score.add_trace(selected_trace_p.data[0]).update_traces(offsetgroup=0.5)
-
-                # Mise à jour du graphique variables avec les clients sélectionnés
-                if type(selected_variable) == list :
-                    if len(selected_variable) == 1 :
-                        selected_trace_p = px.strip(selected_data_p, y=selected_variable[0],  
-                                 color=selected_data_p["prediction_pret"], color_discrete_map=color_discrete_map,
-                                 hover_data=["SK_ID_CURR", "score_note"],
-                                 ).update_traces(marker_size=point_size+18, name = "Sélectionné(s)",
-                                                marker_line_color="black", marker_line_width=2)
-                        figure_variables.add_trace(selected_trace_p.data[0])
-                        if selected_affichage == "strip":
-                            figure_variables.update_traces(offsetgroup=0.5)
-
-                    else :
-                        selected_trace_p = px.scatter(selected_data_p, x=selected_variable[0], y = selected_variable[1],  
-                                 color=selected_data_p["prediction_pret"], color_discrete_map=color_discrete_map,
-                                 hover_data=["SK_ID_CURR", "score_note"],
-                                 ).update_traces(marker_size=point_size+18, name = "Sélectionné(s)",
-                                                marker_line_color="black", marker_line_width=2)
-                        figure_variables.add_trace(selected_trace_p.data[0])
-
-            if not selected_data_np.empty:
-                # Mise à jour du graphique score avec les clients sélectionnés
-                selected_trace_np = px.strip(selected_data_np, y=scoring_choisie, 
-                                 color=selected_data_np["prediction_pret"], color_discrete_map=color_discrete_map,
-                                 hover_data=["SK_ID_CURR", "score_note"],
-                                 ).update_traces(marker_size=point_size+18, name = "Sélectionné(s)",
-                                                marker_line_color="black", marker_line_width=2)
-                figure_score.add_trace(selected_trace_np.data[0]).update_traces(offsetgroup=0.5)
-
-                # Mise à jour du graphique variables avec les clients sélectionnés
-                if type(selected_variable) == list :
-                    if len(selected_variable) == 1 :
-                        selected_trace_np = px.strip(selected_data_np, y=selected_variable[0],  
-                                 color=selected_data_np["prediction_pret"], color_discrete_map=color_discrete_map,
-                                 hover_data=["SK_ID_CURR", "score_note"],
-                                 ).update_traces(marker_size=point_size+18, name = "Sélectionné(s)",
-                                                marker_line_color="black", marker_line_width=2)
-                        figure_variables.add_trace(selected_trace_np.data[0])
-                        if selected_affichage == "strip":
-                            figure_variables.update_traces(offsetgroup=0.5)
-
-                    else :
-                        selected_trace_np = px.scatter(selected_data_np, x=selected_variable[0], y = selected_variable[1],  
-                                 color=selected_data_np["prediction_pret"], color_discrete_map=color_discrete_map,
-                                 hover_data=["SK_ID_CURR", "score_note"],
-                                 ).update_traces(marker_size=point_size+18, name = "Sélectionné(s)",
-                                                marker_line_color="black", marker_line_width=2)
-                        figure_variables.add_trace(selected_trace_np.data[0])
-
-        # On prépare le graphique sur les features importances du modèle
-        figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", font_size, variance_importance, color_point, selected_variable)        
-
-        if selected_client is not None:
-            option_client_variable = [clients for clients in selected_client]
-            
-            if selected_client_variable is not None:
-                df1 = file_df_client_score[file_df_client_score.SK_ID_CURR == selected_client_variable]
-                df2 = file_df[file_df.SK_ID_CURR == selected_client_variable]
-                figure_feature_importance_client = figure_feature_client_dash(df1, df2, nb_variable = 10, color_point = color_point, size = font_size)            
- 
-        list_var_dl = ["SK_ID_CURR", "score", "score_note"]
-        # On ajoute la contribution des variables au score (% selon la contribution totale)
-        # Négative ou positive, selon l'outcome (Négatif si contribue à ne pas obtenir un prêt, positif inversement)
-        
-        # On mesure la contribution en pourcentage
-        contribution_pourcentage = round(file_df_client_score.apply(lambda x : ((x[2:]) / abs(x[2:]).sum()) * - 100, axis = 1), 2)
-        # on assemble les deux types d'informations
-        dl_file = pd.concat([file_df[list_var_dl], contribution_pourcentage],  axis = 1)
-        
-        # On télécharge l'ensemble des données clients
-        if n_clicks_dl_file_all > 0:
-            file_sent = dcc.send_data_frame(dl_file.to_csv, "Result_prediction_all.csv", index=False)
-            n_clicks_dl_file_all = 0
-        # On télécharge les données des clients sélectionnés
-        elif n_clicks_dl_file_clients > 0 :
-            # Safegard pour éviter toute erreur de téléchargement
-            if selected_client is not None:
-                file_sent = dcc.send_data_frame(dl_file.loc[dl_file.SK_ID_CURR.isin(selected_client), :].to_csv, "Result_prediction_client.csv", index=False)
-            else:
-                file_sent = None
-            n_clicks_dl_file_clients = 0
-            
-        else :
-            file_sent = None
-            
-        return (n_clicks_del,
-                table1, table2, 
-                selected_client, selected_variable,
-                figure_score, option_drop_var, 
-                    option_drop_clients, option_drop_var_graph, 
-                        selected_affichage, figure_variables, 
-                        figure_feat_imp, n_clicks_file, 
-                            content, file_sent, 
-                                n_clicks_dl_file_all, n_clicks_dl_file_clients, 
-                                    figure_feature_importance_client, option_client_variable,
-                                       )
+        return (option_drop_clients, option_drop_var_x, option_drop_var_y, option_drop_var_graph, option_client_variable,
+                selected_client, selected_variable_x, selected_variable_y, selected_affichage, n_click_echange)
+    
 @app.callback(
     Output(component_id="activity-interval", component_property="n_intervals"),
+    
     Input(component_id="activity-interval", component_property="n_intervals"), 
+    
     State(component_id="clear-screen", component_property="data"),
     prevent_initial_call=True,
 )
@@ -981,6 +952,244 @@ def inactivity(n_interval, clear_statut):
         #update_table_and_button(1, 0, None, "score", None, None, 18, 8, "plotly", "strip", 0.9, 0, 0, None, clear_statut, n_interval)
 
     return n_interval
+
+@app.callback(
+    Output(component_id="table_client", component_property="children"),
+    Output(component_id="table_prediction", component_property="children"),
+
+    Input(component_id="dropdown_client", component_property="value"),  
+    Input(component_id="activity-interval", component_property="n_intervals"),  
+    Input(component_id="donnees-fichier", component_property="data"),
+    
+    prevent_initial_call=True,
+)
+
+
+def affichage_tab_clients(selected_client, n_interval, file):
+        
+    global temps_actuel
+    global file_df
+
+    # Si il y a une activité utilisateur, on consigne le temps
+    # On ne modifie pas le temps quand c'est activity-interval qui intervient
+    if ctx.triggered_id != "activity-interval":
+        temps_actuel = time.time()    
+    
+    if file_df is not None :
+        # On prend la colonne ID client et les dernières colonnes liées à la prédiction crédit
+        cols = [0] + list(range(-6, 0))
+        
+        if selected_client is None :
+            table1 = dash_table.DataTable(
+                data=file_df.iloc[:, :100].to_dict('records'),
+                page_size=10,
+                style_table={'overflowX': 'auto'}
+            )
+            table2 = dash_table.DataTable(
+                data=file_df.iloc[:, cols].to_dict('records'),
+                page_size=10,
+                style_table={'overflowX': 'auto'}
+            )
+        else :
+            filtered_df = file_df[file_df['SK_ID_CURR'].isin(selected_client)]
+            table1 = dash_table.DataTable(
+                data=filtered_df.iloc[:, :100].to_dict('records'),
+                page_size=10,
+                style_table={'overflowX': 'auto'}
+            )
+            table2 = dash_table.DataTable(
+                data=filtered_df.iloc[:, cols].to_dict('records'),
+                page_size=10,
+                style_table={'overflowX': 'auto'}
+            )
+    else : 
+        table1 = dash_table.DataTable()
+        table2 = dash_table.DataTable()
+
+    return table1, table2
+
+@app.callback(
+    Output(component_id="download-data", component_property="data"),
+    Output(component_id="download-data_all-button", component_property="n_clicks"),
+    Output(component_id="download-data_client-button", component_property="n_clicks"),
+    
+    Input(component_id="download-data_all-button", component_property="n_clicks"),
+    Input(component_id="download-data_client-button", component_property="n_clicks"),
+    Input(component_id="dropdown_client", component_property="value"),
+    Input(component_id="activity-interval", component_property="n_intervals"), 
+    prevent_initial_call=True,
+)
+
+
+def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_client, n_interval):
+    
+    global temps_actuel
+    global file_df
+    global file_df_client_score
+
+    # Si il y a une activité utilisateur, on consigne le temps
+    # On ne modifie pas le temps quand c'est activity-interval qui intervient
+    if ctx.triggered_id != "activity-interval":
+        temps_actuel = time.time()     
+    
+    file_sent = None
+    
+    if file_df is not None :
+        list_var_dl = ["SK_ID_CURR", "score", "score_note"]
+        # On ajoute la contribution des variables au score (% selon la contribution totale)
+        # Négative ou positive, selon l'outcome (Négatif si contribue à ne pas obtenir un prêt, positif inversement)
+
+        # On mesure la contribution en pourcentage
+        contribution_pourcentage = round(file_df_client_score.apply(lambda x : ((x[2:]) / abs(x[2:]).sum()) * - 100, axis = 1), 2)
+        
+        # On assemble les deux types d'informations
+        dl_file = pd.concat([file_df[list_var_dl], contribution_pourcentage],  axis = 1)
+
+        # On télécharge l'ensemble des données clients
+        if n_clicks_dl_file_all > 0:
+            file_sent = dcc.send_data_frame(dl_file.to_csv, "Result_prediction_all.csv", index=False)
+            n_clicks_dl_file_all = 0
+        
+        # On télécharge les données des clients sélectionnés
+        elif n_clicks_dl_file_clients > 0 :
+            # Safegard pour éviter toute erreur de téléchargement
+            if selected_client is not None:
+                file_sent = dcc.send_data_frame(dl_file.loc[dl_file.SK_ID_CURR.isin(selected_client), :].to_csv, 
+                                                "Result_prediction_client.csv", index=False)
+            
+            n_clicks_dl_file_clients = 0
+    else:
+        n_clicks_dl_file_all, n_clicks_dl_file_clients = 0, 0
+
+    return file_sent, n_clicks_dl_file_all, n_clicks_dl_file_clients    
+
+
+
+@app.callback(
+    Output(component_id="graph_pred", component_property="figure"),
+    Output(component_id="graph_variables", component_property="figure"),
+    Output(component_id="graph_model", component_property="figure"),
+    Output(component_id="graph_client", component_property="figure"),
+    Output(component_id="initialize_figure_model", component_property="data"),
+    
+    Input(component_id="dropdown_scoring", component_property="value"),
+    Input(component_id="dropdown_client", component_property="value"),
+    Input(component_id="dropdown_variable_x", component_property="value"),
+    Input(component_id="dropdown_variable_y", component_property="value"),
+    Input(component_id="dropdown_fig_type", component_property="value"),
+    Input(component_id="dropdown_client_var", component_property="value"),  
+    Input(component_id="feature-importance-slider", component_property="value"),
+    Input(component_id="color-palette-dropdown", component_property="value"),
+    Input(component_id="point-size-slider", component_property="value"),
+    Input(component_id="font-size-slider", component_property="value"), 
+    Input(component_id="activity-interval", component_property="n_intervals"),
+    Input(component_id="donnees-fichier", component_property="data"),
+    
+    State(component_id="initialize_figure_model", component_property="data"),
+    #prevent_initial_call=True,
+)
+
+def figures_callback(scoring_choisie, selected_client, selected_variable_x, selected_variable_y,
+                     selected_affichage, selected_client_variable, variance_importance,
+                     color_point, point_size, font_size, n_interval, 
+                     file, initialize_graph_model):
+    
+    global temps_actuel
+    global file_df
+    global file_df_client_score
+    
+    var_x_y = [selected_variable_x, selected_variable_y]
+
+    # Si il y a une activité utilisateur, on consigne le temps
+    # On ne modifie pas le temps quand c'est activity-interval qui intervient
+    if ctx.triggered_id != "activity-interval":
+        temps_actuel = time.time()
+        
+    # On défini des couleurs selon la condition
+    if color_point == "plotly" :
+        color_discrete_map = {"Pret": "blue", "Non pret": "red"}
+    
+    #Développé par IBM, source : https://davidmathlogic.com/colorblind/)
+    elif color_point == "colorblind" :
+        color_discrete_map = {"Pret": '#648FFF', "Non pret": '#FFB000'}
+        
+    # On prépare le graphique sur les features importances du modèle    
+    if (initialize_graph_model == False) or (ctx.triggered_id == "feature-importance-slider"):        
+        figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", 
+                                                         font_size, variance_importance, color_point, var_x_y)
+        initialize_graph_model = True
+    else : 
+        figure_feat_imp = dash.no_update
+    
+    trigger_patch = ["color-palette-dropdown", "point-size-slider", "font-size-slider"]    
+    
+    if file_df is not None :
+        
+        # Seulement is on a initialisé une première fois les graphiques
+        if ctx.triggered_id in trigger_patch :
+
+            # On utilise patch pour ne devoir changer qu'un aspect de l'image
+            patched_figure_score = Patch()
+            patched_figure_variable = Patch()
+            patched_figure_features_model = Patch()
+            patched_figure_features_client = Patch()
+
+            if ctx.triggered_id == "color-palette-dropdown":
+                for patched in [patched_figure_score, patched_figure_variable, patched_figure_features_model, patched_figure_features_client]:
+
+                    patched['data'][0]['marker']['color'] = color_discrete_map["Non pret"]
+                    patched['data'][1]['marker']['color'] = color_discrete_map["Pret"]
+                    patched['data'][3]['marker']['color'] = color_discrete_map["Non pret"]
+                    patched['data'][2]['marker']['color'] = color_discrete_map["Pret"]
+
+            elif ctx.triggered_id == "point-size-slider":
+                for patched in [patched_figure_score, patched_figure_variable]:
+                    for i in range(4):
+                        patched['data'][i]['marker']['size'] = point_size if i < 2 else point_size + 18
+
+            elif ctx.triggered_id == "font-size-slider":
+                for patched in [patched_figure_score, patched_figure_variable, patched_figure_features_model, patched_figure_features_client]:
+                    patched['layout']['font']['size'] = font_size
+
+            return patched_figure_score, patched_figure_variable, patched_figure_features_model, patched_figure_features_client, initialize_graph_model 
+        
+        figure_score = dash.no_update
+        figure_variable = dash.no_update
+        figure_feature_importance_client = dash.no_update
+        
+        # donnees-fichier nous permet d'actualiser au chargement des données
+        if ctx.triggered_id in ["dropdown_scoring", "donnees-fichier"]:
+            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size)
+            
+        elif ctx.triggered_id in ["dropdown_variable_x", "dropdown_variable_y", "dropdown_fig_type"]:
+            figure_variable = figure_variable_dash(file_df, var_x_y, selected_client, selected_affichage, color_discrete_map, point_size, font_size)
+            # On met à jour l'autre figure que dans la condition où une variable a été sélectionnée
+            if ctx.triggered_id in ["dropdown_variable_x", "dropdown_variable_y"]:
+                figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", 
+                                                         font_size, variance_importance, color_point, var_x_y)
+                
+        elif (ctx.triggered_id == "dropdown_client_var"):
+            # on met à jour la figure car changement de client
+            if selected_client_variable is not None :
+                df1 = file_df_client_score[file_df_client_score.SK_ID_CURR == selected_client_variable]
+                df2 = file_df[file_df.SK_ID_CURR == selected_client_variable]
+                figure_feature_importance_client = figure_feature_client_dash(df1, df2, nb_variable = 10, color_point = color_point, size = font_size)            
+            # on revient à aucun affichage
+            else : 
+                figure_feature_importance_client = px.bar() 
+
+        elif (ctx.triggered_id == "dropdown_client") :
+            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size)
+            figure_variable = figure_variable_dash(file_df, var_x_y, selected_client, selected_affichage, color_discrete_map, point_size, font_size)
+        
+            
+    else :
+        figure_score = px.scatter() 
+        figure_variable = px.scatter()
+        figure_feature_importance_client = px.bar()    
+
+    return figure_score, figure_variable, figure_feat_imp, figure_feature_importance_client, initialize_graph_model
+
 
 # Run the app
 if __name__ == '__main__':
