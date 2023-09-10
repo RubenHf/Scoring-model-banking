@@ -1,5 +1,6 @@
 import dash
 from dash import Dash, html, dash_table, dcc, callback, Output, Input, State, ctx, Patch
+import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly
 import plotly.express as px
@@ -14,6 +15,7 @@ import shap
 import pickle
 import time
 from mlflow.sklearn import load_model
+
 
 # On load le modèle 
 model = load_model("banking_model_20230901135647")
@@ -205,9 +207,11 @@ def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_poin
         
         # On crée un subplot de 2 lignes, avec une différence de taille entre les 2 figures
         fig_general = sp.make_subplots(rows=2, cols=1, row_heights=[9, 1], shared_xaxes=True,
-                              subplot_titles=("Valeurs par variable", 
+                              subplot_titles=(f"Les 10 variables contribuant le plus <br>à la prédiction du client : {round(client[0])} ", 
                                               f"Valeur globale : {'Pas de prêt' if shape_global['valeur'] <= 0 else 'Prêt'}"),
-                              vertical_spacing=0.1)
+                              vertical_spacing=0.05)
+        
+        fig_general.update_annotations(font=dict(size=8+size, color="black"))
 
         # On ajoute la première figure en haut
         for trace in figure_var.data:
@@ -223,14 +227,13 @@ def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_poin
 
         fig_general.update_layout(
             title=dict(
-                text = (f"Les 10 variables contribuant le plus à la prédiction du client : {round(client[0])} "),
                 font=dict(size=8+size, color="black"), x=0.5, xanchor='center'),
             
             font=dict(size=size, color="black"),
-            xaxis=dict(title = "Importance relative de chaque variable"),
-            yaxis=dict(title = "Variable(s) d'intérêt(s)",
+            yaxis=dict(title = "",#"Variable(s) d'intérêt(s)",
                 tickmode='array', tickvals=list(range(nb_variable + 1)),  
-                dtick=1, automargin=True)
+                dtick=1, automargin=False),
+            margin=dict(l= 200 - ((1 - size / 36) * 30), r=20, t=150, b=20),# on va de 50 à 200 (18 à 36 en taille)
         )
             
         fig_general.add_shape(type="line", x0=0, x1=0, y0=-0.5, y1=nb_variable+0.5,
@@ -242,6 +245,7 @@ def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_poin
         
 def return_dataframe_client(df, list_client):
     return df.loc[df.SK_ID_CURR.isin(list_client)]
+
 
 def feature_importance_threshold(df, feats, importance, variance_importance = 0.9):
 
@@ -311,23 +315,25 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
         title=dict(
             text = (
                     f"{mask.shape[0]} variable{'(s)' if mask.shape[0] > 1 else ''} "
-                    f"contribue{'nt' if mask.shape[0] > 1 else ''} à expliquer "
+                    f"contribue{'nt' if mask.shape[0] > 1 else ''} <br>à expliquer "
                     f"{round(variance_importance * 100)} % du modèle"
                 ),
-            font=dict(size=4+size, color="black"),
-            x=0.5,  # Center the title horizontally
-            xanchor='center'
+            font=dict(size=8+size, color="black"),
+            x=0.5,  
+            xanchor='center',
         ),
+        margin=dict(l=200 - ((1 - size / 36) * 30), r=20, t=150, b=20),# on va de 50 à 200 (18 à 36 en taille)
         font=dict(size=size, color="black"),
         xaxis=dict(title = "Importance (valeur absolue)"),
-        yaxis=dict(
+        yaxis=dict(title = "",
             tickmode='array',  
             tickvals=list(range(mask.shape[0])),  
             dtick=1,  
-            automargin=True)
+            automargin=False),
     )
     # On retourne la figure
     return figure
+
 
 
 def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, point_size, font_size):
@@ -491,15 +497,6 @@ def figure_variable_dash(df, selected_variable, selected_client, selected_affich
 
 
 
-
-
-
-
-
-
-
-
-
 ##### Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -512,9 +509,6 @@ temps_actuel = time.time()
 # Temps d'inactivité
 temps_inactivite = 5 * 60
 interval_check = 5*60*1000 # 5 minutes
-
-file_df = None
-file_df_client_score = None
 
 # Define the layout for the home page
 home_page = html.Div([ 
@@ -552,7 +546,7 @@ home_page = html.Div([
             ),
         ],
     ),
-    
+
     # On affiche les 2 tableaux
     html.Div([
         html.Div("Visualisation des données", style={'float': 'center', 'textAlign': 'center', 'color': 'black', 'fontSize': 24, 'width': '50%'}),
@@ -568,7 +562,7 @@ home_page = html.Div([
         # Upload liste de clients et leur caractéristiques
     html.Div(className='row',
         style={'textAlign': 'center', 'color': 'black', 'fontSize': 24}, children=[
-            html.Div(className='row', children = "Télécharger les fichiers de prédictions"),
+            html.Div(className='row', children = "Télécharger les résultats de la prédiction"),
             # Boutton pour download les résultats 
             html.Button("Result_prediction_all.csv", id="download-data_all-button", n_clicks = 0, style={'color': 'black', 'margin-right':'10px'}),
             html.Button("Result_prediction_client.csv", id="download-data_client-button", n_clicks = 0, style={'color': 'black'}),
@@ -696,8 +690,10 @@ home_page = html.Div([
         interval=interval_check, 
         n_intervals=0),
     dcc.Store(id='clear-screen', data=False),
-    dcc.Store(id='initialize_figure_model', data=False),
-    dcc.Store(id='donnees-fichier', data=None),    
+    dcc.Store(id='time_session', data=None),
+    dcc.Store(id='initialize_figure_model', data=False),  
+    dcc.Store(id='fichier_utilisateur', data=None),
+    dcc.Store(id='fichier_utilisateur_prediction', data=None),    
 
 ]),
 
@@ -727,34 +723,23 @@ def display_page(pathname):
         return page_2
     else:
         return home_page
-    
+        
 
 @app.callback(    
-    Output(component_id="del_file_button", component_property="n_clicks"),
-    Output(component_id="test_file_button", component_property="n_clicks"),
-    Output(component_id="upload-data", component_property="contents"),
-    Output(component_id="donnees-fichier", component_property="data"),
+    Output(component_id="fichier_utilisateur", component_property="data"),
+    Output(component_id="fichier_utilisateur_prediction", component_property="data"),
     
-    Input(component_id="del_file_button", component_property="n_clicks"),
     Input(component_id="test_file_button", component_property="n_clicks"),
     Input(component_id="upload-data", component_property="contents"),  
-    Input(component_id="activity-interval", component_property="n_intervals"), 
-    Input(component_id="donnees-fichier", component_property="data"),
+    Input(component_id="clear-screen", component_property="data"),
+    Input(component_id="del_file_button", component_property="n_clicks"),
+    
     prevent_initial_call=True,
 )
 
 # Téléchargement des fichiers
-def gestion_files(n_clicks_del_file, n_clicks_load_file, content, n_interval, file):
-    
-    global temps_actuel
-    global file_df
-    global file_df_client_score
-
-    # Si il y a une activité utilisateur, on consigne le temps
-    # On ne modifie pas le temps quand c'est activity-interval qui intervient
-    if ctx.triggered_id != "activity-interval":
-        temps_actuel = time.time()     
-        
+def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_):
+            
     # On charge un fichier csv 
     if content is not None: 
         content_type, content_string = content.split(",")
@@ -766,28 +751,37 @@ def gestion_files(n_clicks_del_file, n_clicks_load_file, content, n_interval, fi
         file_df = application_model(file_df, model, proba_threshold)
         file_df_client_score = feature_importance_client(file_df, model, explainer_model)
         
-        # On remet la valeur par défaut pour permettre de nouveaux téléchargements
-        content = None
-        file = True
+        # On prépare pour stocker sur l'app
+        fichier_utilisateur = file_df.to_json(date_format='iso', orient='split')
+        fichier_utilisateur_score = file_df_client_score.to_json(date_format='iso', orient='split')
+
     
-    # On charge le fichier test.csv
-    if n_clicks_load_file == 1:
+    # On charge le fichier test.csv (en local, livré avec l'application)
+    elif ctx.triggered_id == "test_file_button":
         file_df = pd.read_csv("test.csv")
+        
         # On mesure les différentes métriques
         file_df = application_model(file_df, model, proba_threshold)
         file_df_client_score = feature_importance_client(file_df, model, explainer_model)
-        n_clicks_load_file = 0
-        file = True
+        fichier_utilisateur = file_df.to_json(date_format='iso', orient='split')
+        fichier_utilisateur_score = file_df_client_score.to_json(date_format='iso', orient='split')
+                
     # on efface les données
-    if n_clicks_del_file == 1:
-        file_df = None
-        file_df_client_score = None
-        n_clicks_del_file = 0
-        file = None
-    # On trigger 
- #   affichage_tab_clients(None, 0)
+    elif clear_statut == True :
+        fichier_utilisateur = None
+        fichier_utilisateur_score = None
+        
+    # on efface les données si on appuie sur le boutton effacer les données
+    elif ctx.triggered_id == "del_file_button":
+        fichier_utilisateur = None
+        fichier_utilisateur_score = None
     
-    return n_clicks_del_file, n_clicks_load_file, content, file
+    else:
+        fichier_utilisateur = dash.no_update
+        fichier_utilisateur_score = dash.no_update
+    
+    
+    return fichier_utilisateur, fichier_utilisateur_score
 
 
 @app.callback(
@@ -810,24 +804,19 @@ def gestion_files(n_clicks_del_file, n_clicks_load_file, content, n_interval, fi
     Input(component_id="dropdown_fig_type", component_property="value"),
     Input(component_id="dropdown_client_var", component_property="value"),   
     Input(component_id="feature-importance-slider", component_property="value"),   
-    Input(component_id="activity-interval", component_property="n_intervals"), 
     Input(component_id="clear-screen", component_property="data"),
-    Input(component_id="donnees-fichier", component_property="data"),
     Input(component_id="exchange-button", component_property="n_clicks"),
+    Input(component_id="fichier_utilisateur", component_property="data"),  
     
+    prevent_initial_call=True,
 )
 
 
-def update_dropdown_menu(selected_client, selected_variable_x, selected_variable_y, selected_affichage, selected_client_variable, variance_importance, n_intervals, clear_statut, file, n_click_echange):
+def update_dropdown_menu(selected_client, selected_variable_x, selected_variable_y, 
+                         selected_affichage, selected_client_variable, variance_importance, 
+                         clear_statut, n_click_echange, fichier_utilisateur):
     
-    global temps_actuel
-    global file_df
-    global file_df_client_score
 
-    # Si il y a une activité utilisateur, on consigne le temps
-    # On ne modifie pas le temps quand c'est activity-interval qui intervient
-    if ctx.triggered_id != "activity-interval":
-        temps_actuel = time.time()
     
     if ctx.triggered_id == "exchange-button":
         # Remise à 0 du boutton
@@ -856,11 +845,13 @@ def update_dropdown_menu(selected_client, selected_variable_x, selected_variable
                 selected_client, selected_variable_x, selected_variable_y, selected_affichage, n_click_echange)
     
     # Par défaut, si aucun fichier de chargé
-    if (file_df is None) or (clear_statut is True):
-        
+    if (fichier_utilisateur is None) or (clear_statut is True):
         return ([], [], [], [], [], None, None, None, None, 0)
         
-    elif file_df is not None :
+    elif fichier_utilisateur is not None :
+        
+        file_df = pd.read_json(fichier_utilisateur, orient='split')
+      
         # On met à jour la liste de dropdown
         # La liste de variable est dépendante de la liste de feature importance
 
@@ -923,61 +914,23 @@ def update_dropdown_menu(selected_client, selected_variable_x, selected_variable
                 selected_client, selected_variable_x, selected_variable_y, selected_affichage, n_click_echange)
     
 @app.callback(
-    Output(component_id="activity-interval", component_property="n_intervals"),
-    
-    Input(component_id="activity-interval", component_property="n_intervals"), 
-    
-    State(component_id="clear-screen", component_property="data"),
-    prevent_initial_call=True,
-)
-
-# Permet de surveiller l'activité utilisateur
-def inactivity(n_interval, clear_statut):
-    
-    global temps_actuel
-    global temps_utilisateur
-    global file_df
-    global file_df_client_score
-    
-    elapsed_time = time.time() - temps_actuel
-    
-    # Si l'utilisateur n'a rien réalisé dans les 5 - 10 dernières minutes, les données sont réinitialisées
-    if elapsed_time > (temps_inactivite) :
-
-        file_df = None
-        file_df_client_score = None
-        clear_statut = True
-        
-        # On réinstancie à 0
-        #update_table_and_button(1, 0, None, "score", None, None, 18, 8, "plotly", "strip", 0.9, 0, 0, None, clear_statut, n_interval)
-
-    return n_interval
-
-@app.callback(
     Output(component_id="table_client", component_property="children"),
     Output(component_id="table_prediction", component_property="children"),
 
     Input(component_id="dropdown_client", component_property="value"),  
-    Input(component_id="activity-interval", component_property="n_intervals"),  
-    Input(component_id="donnees-fichier", component_property="data"),
+    Input(component_id="fichier_utilisateur", component_property="data"),
     
     prevent_initial_call=True,
 )
 
 
-def affichage_tab_clients(selected_client, n_interval, file):
-        
-    global temps_actuel
-    global file_df
-
-    # Si il y a une activité utilisateur, on consigne le temps
-    # On ne modifie pas le temps quand c'est activity-interval qui intervient
-    if ctx.triggered_id != "activity-interval":
-        temps_actuel = time.time()    
-    
-    if file_df is not None :
+def affichage_tab_clients(selected_client, fichier_utilisateur):
+            
+    if fichier_utilisateur is not None :
         # On prend la colonne ID client et les dernières colonnes liées à la prédiction crédit
         cols = [0] + list(range(-6, 0))
+        
+        file_df = pd.read_json(fichier_utilisateur, orient='split')
         
         if selected_client is None :
             table1 = dash_table.DataTable(
@@ -1010,31 +963,25 @@ def affichage_tab_clients(selected_client, n_interval, file):
 
 @app.callback(
     Output(component_id="download-data", component_property="data"),
-    Output(component_id="download-data_all-button", component_property="n_clicks"),
-    Output(component_id="download-data_client-button", component_property="n_clicks"),
     
     Input(component_id="download-data_all-button", component_property="n_clicks"),
     Input(component_id="download-data_client-button", component_property="n_clicks"),
-    Input(component_id="dropdown_client", component_property="value"),
-    Input(component_id="activity-interval", component_property="n_intervals"), 
+    
+    State(component_id="dropdown_client", component_property="value"),
+    State(component_id="fichier_utilisateur", component_property="data"),
+    State(component_id="fichier_utilisateur_prediction", component_property="data"),
     prevent_initial_call=True,
 )
 
-
-def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_client, n_interval):
-    
-    global temps_actuel
-    global file_df
-    global file_df_client_score
-
-    # Si il y a une activité utilisateur, on consigne le temps
-    # On ne modifie pas le temps quand c'est activity-interval qui intervient
-    if ctx.triggered_id != "activity-interval":
-        temps_actuel = time.time()     
+def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_client, fichier_utilisateur, fichier_utilisateur_prediction):
     
     file_sent = None
     
-    if file_df is not None :
+    if fichier_utilisateur is not None :
+        
+        file_df = pd.read_json(fichier_utilisateur, orient='split')
+        file_df_client_score = pd.read_json(fichier_utilisateur_prediction, orient='split')
+
         list_var_dl = ["SK_ID_CURR", "score", "score_note"]
         # On ajoute la contribution des variables au score (% selon la contribution totale)
         # Négative ou positive, selon l'outcome (Négatif si contribue à ne pas obtenir un prêt, positif inversement)
@@ -1046,22 +993,17 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
         dl_file = pd.concat([file_df[list_var_dl], contribution_pourcentage],  axis = 1)
 
         # On télécharge l'ensemble des données clients
-        if n_clicks_dl_file_all > 0:
+        if ctx.triggered_id == "download-data_all-button":
             file_sent = dcc.send_data_frame(dl_file.to_csv, "Result_prediction_all.csv", index=False)
-            n_clicks_dl_file_all = 0
         
         # On télécharge les données des clients sélectionnés
-        elif n_clicks_dl_file_clients > 0 :
+        elif ctx.triggered_id == "download-data_client-button" :
             # Safegard pour éviter toute erreur de téléchargement
             if selected_client is not None:
                 file_sent = dcc.send_data_frame(dl_file.loc[dl_file.SK_ID_CURR.isin(selected_client), :].to_csv, 
                                                 "Result_prediction_client.csv", index=False)
             
-            n_clicks_dl_file_clients = 0
-    else:
-        n_clicks_dl_file_all, n_clicks_dl_file_clients = 0, 0
-
-    return file_sent, n_clicks_dl_file_all, n_clicks_dl_file_clients    
+    return file_sent
 
 
 
@@ -1082,8 +1024,8 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
     Input(component_id="color-palette-dropdown", component_property="value"),
     Input(component_id="point-size-slider", component_property="value"),
     Input(component_id="font-size-slider", component_property="value"), 
-    Input(component_id="activity-interval", component_property="n_intervals"),
-    Input(component_id="donnees-fichier", component_property="data"),
+    Input(component_id="fichier_utilisateur", component_property="data"),
+    Input(component_id="fichier_utilisateur_prediction", component_property="data"),
     
     State(component_id="initialize_figure_model", component_property="data"),
     #prevent_initial_call=True,
@@ -1091,19 +1033,10 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
 
 def figures_callback(scoring_choisie, selected_client, selected_variable_x, selected_variable_y,
                      selected_affichage, selected_client_variable, variance_importance,
-                     color_point, point_size, font_size, n_interval, 
-                     file, initialize_graph_model):
-    
-    global temps_actuel
-    global file_df
-    global file_df_client_score
+                     color_point, point_size, font_size,
+                    fichier_utilisateur, fichier_utilisateur_prediction, initialize_graph_model):    
     
     var_x_y = [selected_variable_x, selected_variable_y]
-
-    # Si il y a une activité utilisateur, on consigne le temps
-    # On ne modifie pas le temps quand c'est activity-interval qui intervient
-    if ctx.triggered_id != "activity-interval":
-        temps_actuel = time.time()
         
     # On défini des couleurs selon la condition
     if color_point == "plotly" :
@@ -1123,8 +1056,8 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
     
     trigger_patch = ["color-palette-dropdown", "point-size-slider", "font-size-slider"]    
     
-    if file_df is not None :
-        
+    if fichier_utilisateur is not None :
+        file_df = pd.read_json(fichier_utilisateur, orient='split')
         # Seulement is on a initialisé une première fois les graphiques
         if ctx.triggered_id in trigger_patch :
 
@@ -1150,6 +1083,12 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
             elif ctx.triggered_id == "font-size-slider":
                 for patched in [patched_figure_score, patched_figure_variable, patched_figure_features_model, patched_figure_features_client]:
                     patched['layout']['font']['size'] = font_size
+                    patched['layout']['title']['font']['size'] = font_size + 8 
+                    if patched in [patched_figure_features_model, patched_figure_features_client]:
+                        patched['layout']['margin']['l'] = 200 - ((1 - font_size / 36) * 30) # on va de 50 à 200 (18 à 36 en taille)  
+                         
+                patched_figure_features_client['layout']['annotations'][0]['font']['size'] = font_size + 8
+                patched_figure_features_client['layout']['annotations'][1]['font']['size'] = font_size + 8
 
             return patched_figure_score, patched_figure_variable, patched_figure_features_model, patched_figure_features_client, initialize_graph_model 
         
@@ -1157,8 +1096,8 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
         figure_variable = dash.no_update
         figure_feature_importance_client = dash.no_update
         
-        # donnees-fichier nous permet d'actualiser au chargement des données
-        if ctx.triggered_id in ["dropdown_scoring", "donnees-fichier"]:
+        # fichier_utilisateur nous permet d'actualiser au chargement des données
+        if ctx.triggered_id in ["dropdown_scoring", "fichier_utilisateur"]:
             figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size)
             
         elif ctx.triggered_id in ["dropdown_variable_x", "dropdown_variable_y", "dropdown_fig_type"]:
@@ -1171,9 +1110,11 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
         elif (ctx.triggered_id == "dropdown_client_var"):
             # on met à jour la figure car changement de client
             if selected_client_variable is not None :
+                file_df_client_score = pd.read_json(fichier_utilisateur_prediction, orient='split')
                 df1 = file_df_client_score[file_df_client_score.SK_ID_CURR == selected_client_variable]
                 df2 = file_df[file_df.SK_ID_CURR == selected_client_variable]
                 figure_feature_importance_client = figure_feature_client_dash(df1, df2, nb_variable = 10, color_point = color_point, size = font_size)            
+
             # on revient à aucun affichage
             else : 
                 figure_feature_importance_client = px.bar() 
@@ -1186,11 +1127,75 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
     else :
         figure_score = px.scatter() 
         figure_variable = px.scatter()
-        figure_feature_importance_client = px.bar()    
+        figure_feature_importance_client = px.bar()  
+        
+        if ctx.triggered_id in ["color-palette-dropdown", "font-size-slider"]     :
+            figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", 
+                                                         font_size, variance_importance, color_point, var_x_y)
 
     return figure_score, figure_variable, figure_feat_imp, figure_feature_importance_client, initialize_graph_model
 
 
+# Principaux bouttons ou options 
+@app.callback(
+    Output(component_id="clear-screen", component_property="data"),
+    Output(component_id="time_session", component_property="data"),
+              
+    Input(component_id="test_file_button", component_property="n_clicks"),
+    Input(component_id="exchange-button", component_property="n_clicks"),
+    Input(component_id="download-data_all-button", component_property="n_clicks"),
+    Input(component_id="download-data_client-button", component_property="n_clicks"),
+    Input(component_id="dropdown_client_var", component_property="value"),
+    Input(component_id="dropdown_client", component_property="value"),
+    Input(component_id="dropdown_variable_x", component_property="value"),
+    Input(component_id="dropdown_variable_y", component_property="value"),
+    Input(component_id="dropdown_fig_type", component_property="value"),
+    Input(component_id="dropdown_scoring", component_property="value"),
+    Input(component_id="feature-importance-slider", component_property="value"),
+    Input(component_id="color-palette-dropdown", component_property="value"),
+    Input(component_id="point-size-slider", component_property="value"),
+    Input(component_id="font-size-slider", component_property="value"), 
+    Input(component_id="fichier_utilisateur", component_property="data"),    
+    Input(component_id="del_file_button", component_property="n_clicks"),
+    
+    Input(component_id="time_session", component_property="data"),
+    Input(component_id="activity-interval", component_property="n_intervals"), 
+)
+
+# On ne prévient pas à l'initialisation, pour avoir un premier temps de référence
+# Permet de surveiller l'activité utilisateur
+# Permet d'avoir des sessions courtes
+
+def inactivity(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, temps_actuel, n_interval):
+    
+    # Initialisation
+    if temps_actuel == None:
+        temps_actuel = time.time()   
+        
+    elapsed_time = time.time() - temps_actuel
+    clear_statut = False
+
+    # Si il y a une activité utilisateur, on consigne le temps
+    # On ne modifie pas le temps quand c'est activity-interval qui intervient
+    if ctx.triggered_id != "activity-interval" and elapsed_time < (temps_inactivite):
+        temps_actuel = time.time()
+        
+        return clear_statut, temps_actuel
+    
+    # Si l'utilisateur n'a rien réalisé dans les 5 - 10 dernières minutes, les données sont réinitialisées
+    elif ctx.triggered_id == "activity-interval" :
+        temps_actuel = time.time()
+        
+        if elapsed_time < temps_inactivite:
+            
+            return clear_statut, temps_actuel
+        
+        else:
+            print("Temps expiré, It's clearing time")
+            clear_statut = True
+
+            return clear_statut, temps_actuel
+        
 # Run the app
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run(debug=False)
