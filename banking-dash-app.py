@@ -508,6 +508,25 @@ def personnalized_describe(df):
     
     return results[liste_statistique].transpose()
 
+def test_stat(groupe1, groupe2):
+    
+    # On réalise un t-test
+    t_statistic, p_value = stats.ttest_ind(groupe1.dropna(), groupe2.dropna())
+
+    # On prend un alpa = 0.05
+    alpha = 0.05  
+
+    # On test s'il y a une différence significative ou non entre les 2 groupes
+    if p_value < alpha:
+        result = "La moyenne des deux groupes est statistiquement différente"
+    else:
+        result = "La moyenne des deux groupes n'est pas statistiquement différente"
+        
+    p_value = "<0.001" if p_value < 0.001 else "{:.3f}".format(p_value)
+
+    result = f"p_value : {p_value}, Résultat : {result}" 
+
+    return result  
 
 ##### Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -675,14 +694,18 @@ home_page = html.Div([
                 value='strip', inline=True)], style={'width': '50%', 'float': 'right'}),
 
         html.Div([
-        dcc.Graph(id="graph_pred", style={'height': '600px', 'width': '50%', 'float': 'left'}),
+            html.Div([
+            dcc.Graph(id="graph_pred", style={'height': '600px', 'width': '50%', 'float': 'left'}),
 
-        dcc.Graph(id="graph_variables", style={'height': '600px', 'width': '50%', 'float': 'right'}),
+            dcc.Graph(id="graph_variables", style={'height': '600px', 'width': '50%', 'float': 'right'}),
 
-        ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
-        
+            ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
+            html.Div(children="", id='statistique-variables', style={'width': '100%', 'float': 'right'}),
+            html.Hr(style={'border-top': '0px solid black'}), # Ligne horizontale
+        ], style={'display': 'flex', 'flex-direction': 'column', 'width': '100%'}),
          
         html.Hr(style={'border-top': '1px solid black'}), # Ligne horizontale
+    
         html.Div(className='row', children="Information sur le modèle et les clients",
             style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
         
@@ -1204,6 +1227,34 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
 
     return figure_score, figure_variable, figure_feat_imp, figure_feature_importance_client, initialize_graph_model
 
+
+@app.callback(
+    Output(component_id="statistique-variables", component_property="children"),
+    
+    Input(component_id="dropdown_variable_x", component_property="value"),
+    Input(component_id="dropdown_variable_y", component_property="value"),
+    
+    State(component_id="fichier_utilisateur", component_property="data"),
+)
+
+def statistique_affichage(var_x, var_y, fichier_utilisateur):
+    resultX = ""
+    resultY = ""
+    children = []
+    
+    if var_x is not None :
+        file_df = pd.read_json(fichier_utilisateur, orient='split')
+        resultX = test_stat(file_df.loc[file_df.prediction_pret == "Pret", var_x], file_df.loc[file_df.prediction_pret == "Non pret", var_x])
+        resultX = f"Variable : {var_x}, {resultX}"  
+        children.append(html.P(resultX))
+        if var_y is not None :
+            resultY = test_stat(file_df.loc[file_df.prediction_pret == "Pret", var_y], file_df.loc[file_df.prediction_pret == "Non pret", var_y]) 
+            resultY = f"Variable : {var_y}, {resultY}"
+            children.append(html.P(resultY))
+        children.append(html.P())
+    return children 
+    
+
 @app.callback(
     Output(component_id="color-palette-dropdown", component_property="value"),
     Output(component_id="point-size-slider", component_property="value"),
@@ -1211,7 +1262,7 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
     Input(component_id="reset-button", component_property="n_clicks"),
     Input(component_id="del_file_button", component_property="n_clicks"),
 )
-
+     
 def reset_affichage(n_clicks_reset, n_click_del):
    # On reset les valeurs 
     return initial_palette,initial_point_size, initial_size
