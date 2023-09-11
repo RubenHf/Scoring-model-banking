@@ -493,8 +493,20 @@ def figure_variable_dash(df, selected_variable, selected_client, selected_affich
 
     return figure_variables
 
-
-
+def personnalized_describe(df):
+    ##
+    #        Permet de mesure plusieurs métrics du dataframe
+    ##
+    liste_statistique = ["Nombre d'entrées", "Remplissage", "Moyenne", "Mediane", "Ecart-type", "Maximum", "Minimun"]
+    results = df.describe().transpose()
+    results['Remplissage'] = (df.count() / df.shape[0] * 100).round(2).astype(str) + " %"
+    
+    results.rename(columns={'50%': 'Mediane', 'count': "Nombre d'entrées", 'mean' : "Moyenne", 'std':"Ecart-type", 'max':"Maximum",'min':"Minimun"},
+                   inplace=True)
+    results = round(results, 2)
+    results.rename_axis(index='Statistiques', inplace=True)
+    
+    return results[liste_statistique].transpose()
 
 
 ##### Initialize the app - incorporate css
@@ -509,6 +521,10 @@ temps_actuel = time.time()
 # Temps d'inactivité
 temps_inactivite = 5 * 60
 interval_check = 5*60*1000 # 5 minutes
+
+initial_size = 18
+initial_point_size = 8
+initial_palette = "plotly"
 
 # Define the layout for the home page
 home_page = html.Div([ 
@@ -557,7 +573,13 @@ home_page = html.Div([
         html.Div(id="table_client", style={'width': '50%','margin-right': '10px'}),
         html.Div(id="table_prediction", style={'width': '50%', 'margin-left': '50px'}),
     ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
-   
+    
+    html.Div([
+            html.Button("⇓ Desciption des données ⇓", id="describe-button", n_clicks = 1, style = {'display': 'none'}),
+            html.Div(id="table_description"),
+        ],  style={'color': 'black'}),
+
+    html.Hr(style={'border-top': '1px solid black'}), # Ligne horizontale
 
         # Upload liste de clients et leur caractéristiques
     html.Div(className='row',
@@ -578,13 +600,13 @@ home_page = html.Div([
         # Option pour la taille des polices, des points et couleurs graphiques
         html.Div([
             html.Label("Taille police (axes et valeurs)", style={'textAlign': 'center'}),
-            dcc.Slider(id='font-size-slider', min=18, max=36, step=2, value=18,
+            dcc.Slider(id='font-size-slider', min=18, max=36, step=2, value=initial_size,
                 marks={i: str(i) for i in range(18, 37, 2)})
         ], style={'width': '50%', 'float': 'left', 'margin': '0 auto'}),
 
         html.Div([
             html.Label("Taille points (graphique)", style={'textAlign': 'center'}),
-            dcc.Slider(id='point-size-slider', min=4, max=16, step=2, value=8,
+            dcc.Slider(id='point-size-slider', min=4, max=16, step=2, value=initial_point_size,
                 marks={i: str(i) for i in range(4, 17, 2)})
         ], style={'width': '50%', 'float': 'right', 'margin': '0 auto'}),
 
@@ -592,15 +614,17 @@ home_page = html.Div([
             html.Label("Palette de couleurs :"),
             dcc.RadioItems(id='color-palette-dropdown',
                 style={'color': 'black', 'fontSize': 15},
-                value='plotly', inline=True,
+                value=initial_palette, inline=True,
                 options=[
                     {'label': 'Défaut', 'value': 'plotly'},
                     {'label': 'Daltonien', 'value': 'colorblind'}
                 ]
             ),
+        ], style={'textAlign': 'center', 'width': '100%'}),
+        html.Div([
+            html.Button("RESET affichage", id='reset-button', n_clicks=0),
         ], style={'textAlign': 'center', 'width': '100%'})
     ]),
-
 
         html.Hr(style={'border-top': '1px solid black'}), # Ligne horizontale
 
@@ -962,6 +986,51 @@ def affichage_tab_clients(selected_client, fichier_utilisateur):
     return table1, table2
 
 @app.callback(
+    Output(component_id="table_description", component_property="children"),
+    Output(component_id="describe-button", component_property="n_clicks"),
+    Output(component_id="describe-button", component_property="children"),
+    Output(component_id="describe-button", component_property="style"),
+    
+    Input(component_id="describe-button", component_property="n_clicks"),
+    Input(component_id="fichier_utilisateur", component_property="data"),
+    
+    State(component_id="dropdown_client", component_property="value"),  
+    
+    prevent_initial_call=True,
+)
+# Cleaning, effacement
+def affichage_description(n_clicks, fichier_utilisateur, selected_client):
+    
+    if fichier_utilisateur is not None :
+        
+        button_visibilite = {'display': 'inline-block'}
+        
+        if n_clicks%2 == 0:
+            file_df = pd.read_json(fichier_utilisateur, orient='split')
+
+            # On réalise la description
+            results_describe = personnalized_describe(file_df.iloc[:, 1:]).reset_index()
+            table3 = dash_table.DataTable(
+                data=results_describe.to_dict('records'),
+                page_size=10,
+                style_table={'overflowX': 'auto'}
+            )
+            texte_button = "⇑ Cacher la description ⇑"
+
+        else :
+            texte_button = "⇓ Desciption des données ⇓"
+            table3 = dash_table.DataTable()
+            n_clicks = 1
+    else : 
+        table3 = dash_table.DataTable()
+        n_clicks = 1
+        button_visibilite = {'display': 'none'}
+        texte_button = dash.no_update
+
+    return table3, n_clicks, texte_button, button_visibilite
+    
+    
+@app.callback(
     Output(component_id="download-data", component_property="data"),
     
     Input(component_id="download-data_all-button", component_property="n_clicks"),
@@ -1135,6 +1204,17 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
 
     return figure_score, figure_variable, figure_feat_imp, figure_feature_importance_client, initialize_graph_model
 
+@app.callback(
+    Output(component_id="color-palette-dropdown", component_property="value"),
+    Output(component_id="point-size-slider", component_property="value"),
+    Output(component_id="font-size-slider", component_property="value"),
+    Input(component_id="reset-button", component_property="n_clicks"),
+    Input(component_id="del_file_button", component_property="n_clicks"),
+)
+
+def reset_affichage(n_clicks_reset, n_click_del):
+   # On reset les valeurs 
+    return initial_palette,initial_point_size, initial_size
 
 # Principaux bouttons ou options 
 @app.callback(
@@ -1157,6 +1237,7 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
     Input(component_id="font-size-slider", component_property="value"), 
     Input(component_id="fichier_utilisateur", component_property="data"),    
     Input(component_id="del_file_button", component_property="n_clicks"),
+    Input(component_id="reset-button", component_property="n_clicks"),
     
     Input(component_id="time_session", component_property="data"),
     Input(component_id="activity-interval", component_property="n_intervals"), 
@@ -1166,7 +1247,7 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
 # Permet de surveiller l'activité utilisateur
 # Permet d'avoir des sessions courtes
 
-def inactivity(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, temps_actuel, n_interval):
+def inactivity(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15, arg16, arg17, temps_actuel, n_interval):
     
     # Initialisation
     if temps_actuel == None:
