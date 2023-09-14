@@ -1,6 +1,7 @@
 .ipynb_checkpoints/
 mlruns/
 venv/
+fichiers/
 access git.txt
 application_test.csv
 application_train.csv
