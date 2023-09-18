@@ -16,11 +16,8 @@ import pickle
 import time
 from mlflow.sklearn import load_model
 
-
 # On load le modèle 
-model = load_model("banking_model_20230901135647")
-
-proba_threshold = 0.42
+model = load_model("banking_model_20230915203320")
 
 # on charge l'objet explainer du modèle
 with open('explainer_model.pkl', 'rb') as explainer_file:
@@ -28,37 +25,15 @@ with open('explainer_model.pkl', 'rb') as explainer_file:
 # on charge les valeurs du modèle
 feature_importance = pd.read_csv("shap_values_model.csv") 
 
-def preparation_file(df, model):
-    
-    if "DAYS_BIRTH" in df.columns:
-        df["ANNEES_AGE"] = (abs(df.DAYS_BIRTH) / 365.25)
-        # On élimine l' ancienne variable
-        df.drop(["DAYS_BIRTH"], axis = 1, inplace = True)
-        
-    if "ANNEES_LAST_PHONE_CHANGE" in df.columns:
-        df["ANNEES_LAST_PHONE_CHANGE"] = round((abs(df.DAYS_LAST_PHONE_CHANGE) / 365.25), 2)
-        # On élimine l' ancienne variable
-        df.drop(["DAYS_LAST_PHONE_CHANGE"], axis = 1, inplace = True)
-    
-    # On corrige les erreurs 
-    infinity_indices = np.where(np.isinf(df))
-    for row_ind, col_ind in zip(*infinity_indices):
-        df.iloc[row_ind, col_ind] = df.iloc[:,col_ind].median()
-    
-    # On récupère les features du modèle
-    features = model.named_steps["select_columns"].columns
-    
-    return  df[features]
-
 def scoring_pret(df, threshold):
     
     # On calcul un score selon si le client a obtenu un prêt ou pas
     # Ce score donne une autre appréciation des probabilités, plus parlant pour un consommateur
-    min_value = 1 - threshold  # Minimum value of proba_pred_pret
-    max_value = 1 - threshold
+    min_value = threshold  
+    max_value = threshold
     
     df.loc[df.prediction_pret == "Pret", "score"] = (df["proba_pred_pret"] - min_value) / (1 - min_value)
-    df.loc[df.prediction_pret == "Non pret", "score"] = (1 - (df["proba_pred_pret"]) / (max_value)) * - 1
+    df.loc[df.prediction_pret == "Non pret", "score"] = (1 - (df["proba_pred_pret"] / max_value)) * - 1
     df.loc[:, "score"] = round(df.loc[:, "score"], 4)
     
     lettres = ['a', 'b', 'c', 'd', 'e', 'f']
@@ -100,7 +75,7 @@ def application_model(df, model, threshold):
     
     result_df = copy.deepcopy(df)
  
-    # On prédit les probabilité selon le modèle
+    # On prédit les probabilitées selon le modèle
     # Prédiction d'avoir un prêt
     result_df["proba_pred_pret"] = np.round(model.predict_proba(result_df)[:, 0], 2)
     # Prédiction de ne pas avoir un prêt
@@ -108,7 +83,7 @@ def application_model(df, model, threshold):
     
     # Résultat selon le threshold du modèle établit. 
     # Si au dessus, la valeur = 1, ce qui correspond à la non obtention d'un prêt
-    result_df["prediction"] = np.where(result_df["proba_pred_non_pret"] >= threshold, 1, 0)
+    result_df["prediction"] = np.where(result_df["proba_pred_pret"] > threshold, 0, 1)
     
     result_df["prediction_pret"] = np.where(result_df["prediction"] == 1, "Non pret", "Pret")
     result_df = scoring_pret(result_df, threshold)
@@ -117,7 +92,7 @@ def application_model(df, model, threshold):
 
 def feature_importance_client(df, model, explainer_model): 
     
-    features = model.named_steps["select_columns"].columns
+    features = model.named_steps["select_columns"].transform(df).columns
     
     x_train_preprocessed = model[:-1].transform(df[features])
     
@@ -127,14 +102,13 @@ def feature_importance_client(df, model, explainer_model):
     
     shap_values = explainer_model(x_train_preprocessed)
     
-    df_sk_shape = pd.DataFrame({'SK_ID_CURR': df["SK_ID_CURR"].values, 'value_total': shap_values.values.sum(axis=1)})
+    df_sk_shape = pd.DataFrame({'SK_ID_CURR': df["SK_ID_CURR"].values, 'VALEUR_TOTALE': shap_values.values.sum(axis=1)})
 
     df_feat_shape = pd.DataFrame(shap_values.values, columns = selected_cols)
 
     df_shape_score = pd.concat([df_sk_shape, df_feat_shape], axis = 1)
     
     return df_shape_score
-
 
 def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_point = "plotly", size = 18):
     
@@ -335,8 +309,7 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
     return figure
 
 
-
-def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, point_size, font_size):
+def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, point_size, font_size, proba_threshold_model):
     
     if scoring_var == "score" :
         threshold = 0
@@ -344,7 +317,7 @@ def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, poin
         textB = threshold - 5
 
     elif scoring_var == "proba_pred_pret":
-        threshold = 1 - proba_threshold
+        threshold = proba_threshold_model
         textH = threshold + 0.05
         textB = threshold - 0.05
 
@@ -408,7 +381,7 @@ def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, poin
                         font=dict(color="black", size=20)
 
                     # On ajoute un texte en dessous de la ligne
-                    ).add_annotation(text=f"Non prêt (n={nb_non_pret})", x=20, y=nb_max, showarrow=False,
+                    ).add_annotation(text=f"Non prêt (n={nb_non_pret})", x=len(df["score_note"].unique()) - 3, y=nb_max, showarrow=False,
                         font=dict(color="black", size=20))
 
         figure_score.update_xaxes(title=dict(
@@ -423,7 +396,6 @@ def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, poin
     figure_score.update_layout(font=dict(size=font_size, color="black"))
     
     return figure_score
-
 
 def figure_variable_dash(df, selected_variable, selected_client, selected_affichage, color_discrete_map, point_size, font_size):
     # Initialisation
@@ -493,6 +465,47 @@ def figure_variable_dash(df, selected_variable, selected_client, selected_affich
 
     return figure_variables
 
+def graph_risque(fl_risque, fl_nb_client, threshold_model):
+    fig_risque = px.line(fl_risque, x="Threshold", y="Risque", line_shape="linear")
+    
+    fig_risque.update_yaxes(range=[0, fl_risque["Risque"].max()])
+    
+    fig_risque.update_traces(fillcolor="rgba(0, 255, 0, 0.2)")  
+    fig_risque.update_layout(
+        title="Risque de se tromper sur un client solvable selon le threshold",
+        xaxis_title="Thresholds",
+        yaxis_title="Risque de se tromper sur un client solvable (%)",
+        xaxis_tickangle=-90,  
+    )   
+    fig_risque.add_shape(type="line", x0=threshold_model, x1=threshold_model, y0=0, y1=fl_risque.Risque.max(),
+                            line=dict(color="black", width=2), row=1, col=1)
+    
+    fig_risque.update_layout(
+        title=dict(font=dict(size=24, color="black"), x=0.5, xanchor='center'),
+        font=dict(size=18, color="black"))
+    
+    fig_client = px.line(fl_nb_client, x="Threshold", y="Nombre de clients", line_shape="linear")
+
+    fig_client.update_yaxes(range=[0, fl_nb_client["Nombre de clients"].max()])
+
+    fig_client.update_traces(fillcolor="rgba(0, 255, 0, 0.2)")  
+    fig_client.update_layout(
+        title="Estimation du nombre de clients solvables trouvables",
+        xaxis_title="Thresholds",
+        yaxis_title="Pourcentage de clients solvables trouvables (%)",
+        xaxis_tickangle=-90,  
+    )
+    
+    fig_client.add_shape(type="line", x0=threshold_model, x1=threshold_model, y0=0, y1=fl_nb_client["Nombre de clients"].max(),
+                            line=dict(color="black", width=2), row=1, col=1)
+    
+    
+    fig_client.update_layout(
+        title=dict(font=dict(size=24, color="black"), x=0.5, xanchor='center'),
+        font=dict(size=18, color="black"))
+    
+    return fig_risque, fig_client
+
 def personnalized_describe(df):
     ##
     #        Permet de mesure plusieurs métrics du dataframe
@@ -528,6 +541,7 @@ def test_stat(groupe1, groupe2):
 
     return result  
 
+
 ##### Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -545,6 +559,11 @@ initial_size = 18
 initial_point_size = 8
 initial_palette = "plotly"
 
+# On initie le seuil
+with open('banking_model_seuil_20230915203320.pkl', 'rb') as seuil:
+    # On avait enregistré le seuil pour ne pas avoir le prêt, on prend ici son inverse.
+    initial_threshold = 1 - pickle.load(seuil)
+
 # Define the layout for the home page
 home_page = html.Div([ 
     # Titre dashboard
@@ -552,13 +571,15 @@ home_page = html.Div([
              style={'textAlign': 'center', 'color': 'black', 'fontSize': 48}),
     html.Hr(style={'border-top': '4px solid black'}), # Ligne horizontale
     
+    dcc.Link("Calibration du modèle", href="/page_2"),
+    
     # Upload liste de clients et leur caractéristiques
     html.Div(className='row',
         style={'textAlign': 'center', 'color': 'black', 'fontSize': 24}, children=[
             html.Div(className='row', children = "Chargez votre fichier clients ou le fichier test.csv"),
             # Boutton pour upload données 
             dcc.Upload(id="upload-data",children=[
-                html.Button("Upload un fichier .csv", style={'color': 'black'})], multiple=False),
+                html.Button("Upload un fichier .csv (10 MB maximum)", style={'color': 'black'})], multiple=False),
             html.Div(className='row', children="ou"),
             # Boutton pour upload les données tests
             html.Button("Upload test.csv", id="test_file_button", n_clicks=0, style={'color': 'black', 'margin-right': '10px'}),
@@ -740,27 +761,57 @@ home_page = html.Div([
     dcc.Store(id='time_session', data=None),
     dcc.Store(id='initialize_figure_model', data=False),  
     dcc.Store(id='fichier_utilisateur', data=None),
-    dcc.Store(id='fichier_utilisateur_prediction', data=None),    
+    dcc.Store(id='fichier_utilisateur_prediction', data=None),
 
 ]),
 
 
-# si nécessaire
+# On crée une seconde page qui permettra à l'utilisateur de modifier le modèle
 page_2 = html.Div([
-    dcc.Link("Retour à la page principale", href="/"),
+    html.Div([
+        dcc.Link("Retour à la page principale", href="/")]),
+    
+    html.Div([
+        html.Label("Threshold du modèle", style={'textAlign': 'center'}),
+        dcc.Slider(id='threshold-slider', min=0, max=0.99, step=0.01, value=None, 
+                marks={initial_threshold: {'label': f"{initial_threshold}"}},
+        tooltip={"placement": "bottom", "always_visible": True})
+    ], style={'width': '75%', 'float': 'center', 'margin': '0 auto'}),
+    
+    html.Div([
+            html.Button("RESET Threshold", id='reset-button-threshold', n_clicks=0),
+        ], style={'textAlign': 'center', 'width': '100%'}),
+    
+    html.Div([
+        html.Div(id="risk-display"),
+        html.Div(id="risk-model-display"),
+        html.Div(id="risk-dynamic-display")
+    ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
+    
+        html.Div([
+        dcc.Graph(id="graph_risque", style={'height': '600px', 'width': '50%', 'float': 'left'}),
 
-    html.P("En cours de construction"),
+        dcc.Graph(id="graph_nb_client", style={'height': '600px', 'width': '50%', 'float': 'right'}),
+
+        ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
+    
+    dcc.Store(id='file_risque', data=None),
+    dcc.Store(id='file_nb_client', data=None),
+    
 ])
-
 
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
 
-    # Page content
+    # Contenu de la page
     html.Div(id='page-content'),
+    
+    # On initialise la valeur 
+    dcc.Store(id='threshold_model', data=initial_threshold),
 ])
 
-# Callback to update the page content based on the URL
+
+# Callback pour mettre à jour la page
 @app.callback(
     Output('page-content', 'children'),
     Input('url', 'pathname')
@@ -769,9 +820,138 @@ def display_page(pathname):
     if pathname == '/page_2':
         return page_2
     else:
-        return home_page
+        return home_page    
+    
+@app.callback(
+    Output('threshold-slider', 'value'),
+    Output('threshold_model', 'data'),
+    
+    Input('threshold-slider', 'value'),
+    Input('threshold_model', 'data'),
+    Input('reset-button-threshold', 'n_clicks'),
+    Input('graph_risque', 'clickData'),
+    Input('graph_nb_client', 'clickData'),   
+) 
+
+def modification_threshold_page2(threshold_slider, threshold_model, reset_button, click_risque, click_client):
+    # On initialise ou on réinitialise
+    if threshold_slider is None:
+        if threshold_model != initial_threshold :
+            return threshold_model, threshold_model
+        
+        else:
+            return initial_threshold, initial_threshold
+    
+    elif ctx.triggered_id == "reset-button-threshold":
+        return initial_threshold, initial_threshold
+    # On modifie si on touche le graphique
+    elif ctx.triggered_id == "graph_risque":
+        return click_risque["points"][0]["x"], click_risque["points"][0]["x"]
+    elif ctx.triggered_id == "graph_nb_client":
+        return click_client["points"][0]["x"], click_client["points"][0]["x"]
+    else: 
+        return threshold_slider, threshold_slider
+    
+@app.callback(    
+    Output(component_id="file_risque", component_property="data"),
+    Output(component_id="file_nb_client", component_property="data"),
+    
+    Input(component_id="file_risque", component_property="data"),
+    Input(component_id="file_nb_client", component_property="data"),
+)
+
+def read_file_page2(fl_risque, fl_nb_client):
+    if (fl_risque is None and fl_nb_client is None):
+        fl_risque, fl_nb_client = pd.read_csv("Risque assessment.csv"), pd.read_csv("Potentiel clients.csv")
+        fl_risque = fl_risque.to_json(date_format='iso', orient='split')
+        fl_nb_client = fl_nb_client.to_json(date_format='iso', orient='split')
+        return fl_risque, fl_nb_client
+    else : 
+        return dash.no_update, dash.no_update
+   
+    
+@app.callback(    
+    Output(component_id="graph_risque", component_property="figure"),
+    Output(component_id="graph_nb_client", component_property="figure"),
+    
+    Input(component_id="file_risque", component_property="data"),
+    Input(component_id="file_nb_client", component_property="data"),
+    Input('threshold_model', 'data'),
+)
+
+def graphs_page2(fl_risque, fl_nb_client, threshold_model):
+    
+    fl_risque = pd.read_json(fl_risque, orient='split')
+    fl_nb_client = pd.read_json(fl_nb_client, orient='split')
+    
+    fig_risque, fig_client = graph_risque(fl_risque, fl_nb_client, threshold_model)
+    
+    return fig_risque, fig_client
+
+@app.callback(
+    Output(component_id="risk-display", component_property="children"),
+    Output(component_id="risk-model-display", component_property="children"),
+    Output(component_id="risk-dynamic-display", component_property="children"),
+    
+    Input(component_id="file_risque", component_property="data"),
+    Input(component_id="file_nb_client", component_property="data"),
+    Input('threshold_model', 'data'),
+)
+
+def affichage_texte_page2(fl_risque, fl_nb_client, threshold_model):
+    
+    fl_risque = pd.read_json(fl_risque, orient='split')
+    fl_nb_client = pd.read_json(fl_nb_client, orient='split')
+    
+    textes = []
+    
+    for i in range(3) :
+        if i == 0:
+            risque_pourcent = fl_risque.loc[fl_risque.Threshold.min(), 'Risque']
+            nb_client_pourcent = fl_nb_client.loc[fl_nb_client.Threshold.min(), 'Nombre de clients']
+            
+        elif i == 1:
+            risque_pourcent = fl_risque.loc[fl_risque.Threshold == initial_threshold, 'Risque'].values[0]
+            nb_client_pourcent = fl_nb_client.loc[fl_nb_client.Threshold == initial_threshold, 'Nombre de clients'].values[0]
+        else:
+            if not fl_risque.empty:
+                risque_pourcent = fl_risque.loc[fl_risque.Threshold == threshold_model, 'Risque'].values[0]
+            else:
+                risque_pourcent = 0
+            if not fl_nb_client.empty:
+                nb_client_pourcent = fl_nb_client.loc[fl_nb_client.Threshold == threshold_model, 'Nombre de clients'].values[0]
+            else:
+                nb_client_pourcent = 0
+    
+        sentence = f"Risque avec nouveau threshold : {risque_pourcent:.2f} %"
+        sentence2 = f"Pourcentage de clients solvable trouvable : {nb_client_pourcent:.2f} %"
+            
+        textes.append(html.Div([
+            html.Div(
+                sentence,
+            ),
+            html.Div(
+                sentence2,
+            ),
+        ],
+        style={
+            'width': '700px', 
+            'height': '300px',  
+            'border': '2px solid #000', 
+            'textAlign': 'center', 
+            'verticalAlign': 'middle',  
+            'lineHeight': '150px',  
+            'fontSize': '18px',  
+            'background-color': '#f0f0f0',  
+            'border-radius': '10px', 
+        }))
         
 
+    return textes[0], textes[1], textes[2]
+
+    
+    
+    
 @app.callback(    
     Output(component_id="fichier_utilisateur", component_property="data"),
     Output(component_id="fichier_utilisateur_prediction", component_property="data"),
@@ -781,26 +961,37 @@ def display_page(pathname):
     Input(component_id="clear-screen", component_property="data"),
     Input(component_id="del_file_button", component_property="n_clicks"),
     
+    State(component_id="threshold_model", component_property="data"),
+    
     prevent_initial_call=True,
 )
 
 # Téléchargement des fichiers
-def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_):
+def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_, proba_threshold_model):
             
     # On charge un fichier csv 
     if content is not None: 
         content_type, content_string = content.split(",")
         decoded = base64.b64decode(content_string)
-        file_df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
         
-        # Plusieurs étapes de préparation du fichier
-        file_df = preparation_file(file_df, model)
-        file_df = application_model(file_df, model, proba_threshold)
-        file_df_client_score = feature_importance_client(file_df, model, explainer_model)
+        file_size = len(decoded)
         
-        # On prépare pour stocker sur l'app
-        fichier_utilisateur = file_df.to_json(date_format='iso', orient='split')
-        fichier_utilisateur_score = file_df_client_score.to_json(date_format='iso', orient='split')
+        # on met une taille limite sur le fichier téléchargé de 10 MB
+        if file_size > 10 * 1024 * 1024:
+            print("La taille du fichier est plus importante que la taille limite")
+            
+            fichier_utilisateur = None
+            fichier_utilisateur_score = None
+        else :
+            file_df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+
+            # Plusieurs étapes de préparation du fichier
+            file_df = application_model(file_df, model, proba_threshold_model)
+            file_df_client_score = feature_importance_client(file_df, model, explainer_model)
+
+            # On prépare pour stocker sur l'app
+            fichier_utilisateur = file_df.to_json(date_format='iso', orient='split')
+            fichier_utilisateur_score = file_df_client_score.to_json(date_format='iso', orient='split')
 
     
     # On charge le fichier test.csv (en local, livré avec l'application)
@@ -808,7 +999,7 @@ def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_):
         file_df = pd.read_csv("test.csv")
         
         # On mesure les différentes métriques
-        file_df = application_model(file_df, model, proba_threshold)
+        file_df = application_model(file_df, model, proba_threshold_model)
         file_df_client_score = feature_importance_client(file_df, model, explainer_model)
         fichier_utilisateur = file_df.to_json(date_format='iso', orient='split')
         fichier_utilisateur_score = file_df_client_score.to_json(date_format='iso', orient='split')
@@ -978,6 +1169,7 @@ def affichage_tab_clients(selected_client, fichier_utilisateur):
         cols = [0] + list(range(-6, 0))
         
         file_df = pd.read_json(fichier_utilisateur, orient='split')
+        file_df = file_df.round(2)
         
         if selected_client is None :
             table1 = dash_table.DataTable(
@@ -1118,6 +1310,7 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
     Input(component_id="font-size-slider", component_property="value"), 
     Input(component_id="fichier_utilisateur", component_property="data"),
     Input(component_id="fichier_utilisateur_prediction", component_property="data"),
+    Input(component_id="threshold_model", component_property="data"),
     
     State(component_id="initialize_figure_model", component_property="data"),
     #prevent_initial_call=True,
@@ -1126,7 +1319,7 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
 def figures_callback(scoring_choisie, selected_client, selected_variable_x, selected_variable_y,
                      selected_affichage, selected_client_variable, variance_importance,
                      color_point, point_size, font_size,
-                    fichier_utilisateur, fichier_utilisateur_prediction, initialize_graph_model):    
+                    fichier_utilisateur, fichier_utilisateur_prediction, proba_threshold_model, initialize_graph_model):    
     
     var_x_y = [selected_variable_x, selected_variable_y]
         
@@ -1190,7 +1383,7 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
         
         # fichier_utilisateur nous permet d'actualiser au chargement des données
         if ctx.triggered_id in ["dropdown_scoring", "fichier_utilisateur"]:
-            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size)
+            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size, proba_threshold_model)
             
         elif ctx.triggered_id in ["dropdown_variable_x", "dropdown_variable_y", "dropdown_fig_type"]:
             figure_variable = figure_variable_dash(file_df, var_x_y, selected_client, selected_affichage, color_discrete_map, point_size, font_size)
@@ -1212,7 +1405,7 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
                 figure_feature_importance_client = px.bar() 
 
         elif (ctx.triggered_id == "dropdown_client") :
-            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size)
+            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size, proba_threshold_model)
             figure_variable = figure_variable_dash(file_df, var_x_y, selected_client, selected_affichage, color_discrete_map, point_size, font_size)
         
             
