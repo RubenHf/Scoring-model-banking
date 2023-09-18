@@ -909,10 +909,12 @@ def affichage_texte_page2(fl_risque, fl_nb_client, threshold_model):
         if i == 0:
             risque_pourcent = fl_risque.loc[fl_risque.Threshold.min(), 'Risque']
             nb_client_pourcent = fl_nb_client.loc[fl_nb_client.Threshold.min(), 'Nombre de clients']
+            sentence = f"Risque sans le modèle : {risque_pourcent:.2f} %"
             
         elif i == 1:
             risque_pourcent = fl_risque.loc[fl_risque.Threshold == initial_threshold, 'Risque'].values[0]
             nb_client_pourcent = fl_nb_client.loc[fl_nb_client.Threshold == initial_threshold, 'Nombre de clients'].values[0]
+            sentence = f"Risque avec le modèle : {risque_pourcent:.2f} %"
         else:
             if not fl_risque.empty:
                 risque_pourcent = fl_risque.loc[fl_risque.Threshold == threshold_model, 'Risque'].values[0]
@@ -922,8 +924,10 @@ def affichage_texte_page2(fl_risque, fl_nb_client, threshold_model):
                 nb_client_pourcent = fl_nb_client.loc[fl_nb_client.Threshold == threshold_model, 'Nombre de clients'].values[0]
             else:
                 nb_client_pourcent = 0
+            
+            sentence = f"Risque avec nouveau threshold : {risque_pourcent:.2f} %"
     
-        sentence = f"Risque avec nouveau threshold : {risque_pourcent:.2f} %"
+
         sentence2 = f"Pourcentage de clients solvable trouvable : {nb_client_pourcent:.2f} %"
             
         textes.append(html.Div([
@@ -935,7 +939,7 @@ def affichage_texte_page2(fl_risque, fl_nb_client, threshold_model):
             ),
         ],
         style={
-            'width': '700px', 
+            'width': '600px', 
             'height': '300px',  
             'border': '2px solid #000', 
             'textAlign': 'center', 
