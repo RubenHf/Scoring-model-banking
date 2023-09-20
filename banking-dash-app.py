@@ -1,6 +1,5 @@
 import dash
 from dash import Dash, html, dash_table, dcc, callback, Output, Input, State, ctx, Patch
-import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly
 import plotly.express as px
@@ -10,11 +9,7 @@ import base64
 import io
 import numpy as np
 import itertools
-import mlflow
-import shap
-import pickle
 import time
-from mlflow.sklearn import load_model
 import requests
 
 
