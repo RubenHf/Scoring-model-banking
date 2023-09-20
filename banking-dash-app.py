@@ -692,7 +692,7 @@ external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
 
-#server = app.server
+server = app.server
 app.title = 'Modèle de prédiction'
 
 temps_actuel = time.time()
