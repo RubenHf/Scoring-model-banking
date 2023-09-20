@@ -85,7 +85,7 @@ def API_feature_importance_model():
         print("La requête a échoué avec le code :", response.status_code)
         print("Contenu du message :", response.text)
 
-        return df
+        return None
 
 def API_prediction(df, threshold):
     # Fonction appelant l'API de prédiction
@@ -181,6 +181,62 @@ def API_get_threshold():
         # On retourne le threshold
         return th.get("data", {})
     
+    else:
+        # La requête a échouée
+        print("La requête a échoué avec le code :", response.status_code)
+        print("Contenu du message :", response.text)
+
+        return None
+
+def API_risque_th_model():
+    # Fonction appelant l'API, renvoie les valeurs risques clients insolvables selon threshold
+    
+    # Lien de l'API permettant de faire la prédiction
+    url="http://banking-model-api-924e29320872.herokuapp.com/risque_th_model"
+
+    # On envoie une requête POST au format JSON 
+    response = requests.post(url)
+
+    # On vérigie l'état de la réponse
+    if response.status_code == 200:
+        # Si tout s'est bien déroulé
+        
+        # On récupère une réponse sous le format json
+        df_reponse = response.json()  
+
+        # On retransforme sous format DataFrame
+        df_reponse = pd.DataFrame(df_reponse.get("data", {}))
+
+        # On retourne le dataframe modifié
+        return df_reponse
+    else:
+        # La requête a échouée
+        print("La requête a échoué avec le code :", response.status_code)
+        print("Contenu du message :", response.text)
+
+        return None
+
+def API_client_th_model():
+    # Fonction appelant l'API, renvoie les valeurs de pourcentage clients solvables selon threshold
+    
+    # Lien de l'API permettant de faire la prédiction
+    url="http://banking-model-api-924e29320872.herokuapp.com/client_th_model"
+
+    # On envoie une requête POST au format JSON 
+    response = requests.post(url)
+
+    # On vérigie l'état de la réponse
+    if response.status_code == 200:
+        # Si tout s'est bien déroulé
+        
+        # On récupère une réponse sous le format json
+        df_reponse = response.json()  
+
+        # On retransforme sous format DataFrame
+        df_reponse = pd.DataFrame(df_reponse.get("data", {}))
+
+        # On retourne le dataframe modifié
+        return df_reponse
     else:
         # La requête a échouée
         print("La requête a échoué avec le code :", response.status_code)
@@ -631,13 +687,12 @@ def test_stat(groupe1, groupe2):
 
     return result  
 
-
 ##### Initialize the app - incorporate css
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
 
-server = app.server
+#server = app.server
 app.title = 'Modèle de prédiction'
 
 temps_actuel = time.time()
@@ -953,7 +1008,7 @@ def modification_threshold_page2(threshold_slider, threshold_model, reset_button
 
 def read_file_page2(fl_risque, fl_nb_client):
     if (fl_risque is None and fl_nb_client is None):
-        fl_risque, fl_nb_client = pd.read_csv("Risque assessment.csv"), pd.read_csv("Potentiel clients.csv")
+        fl_risque, fl_nb_client = API_risque_th_model(), API_client_th_model()
         fl_risque = fl_risque.to_json(date_format='iso', orient='split')
         fl_nb_client = fl_nb_client.to_json(date_format='iso', orient='split')
         return fl_risque, fl_nb_client
@@ -1140,16 +1195,15 @@ def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_, proba_th
     Input(component_id="clear-screen", component_property="data"),
     Input(component_id="exchange-button", component_property="n_clicks"),
     Input(component_id="fichier_utilisateur", component_property="data"),  
+    Input(component_id="graph_pred", component_property="clickData"),
+    Input(component_id="graph_variables", component_property="clickData"),
     
     prevent_initial_call=True,
 )
 
-
 def update_dropdown_menu(selected_client, selected_variable_x, selected_variable_y, 
                          selected_affichage, selected_client_variable, variance_importance, 
-                         clear_statut, n_click_echange, fichier_utilisateur):
-    
-
+                         clear_statut, n_click_echange, fichier_utilisateur, click_graph_pred, click_graph_var):
     
     if ctx.triggered_id == "exchange-button":
         # Remise à 0 du boutton
@@ -1198,13 +1252,31 @@ def update_dropdown_menu(selected_client, selected_variable_x, selected_variable
         # On revient à la condition initiale
         selected_client = None if selected_client == [] else selected_client
 
-        # On transforme en liste
+        # On transforme en liste si un seul client sélectionné
         if (type(selected_client) != list) & (selected_client is not None):
             selected_client = [selected_client]
+            # On ajoute à la liste si on appuie sur un client sur le graph
+            if ctx.triggered_id == "graph_pred":
+                selected_client.append(click_graph_pred["points"][0]["customdata"][0])
+            elif ctx.triggered_id == "graph_variables":
+                selected_client.append(click_graph_var["points"][0]["customdata"][0])
+        elif selected_client is None :             
+            # On ajoute à la liste si on appuie sur un client sur le graph
+            if ctx.triggered_id == "graph_pred":
+                selected_client = [click_graph_pred["points"][0]["customdata"][0]]
+            elif ctx.triggered_id == "graph_variables":
+                selected_client = [click_graph_var["points"][0]["customdata"][0]]
+                
+        else : 
+            # On ajoute à la liste si on appuie sur un client sur le graph
+            if ctx.triggered_id == "graph_pred":
+                selected_client.append(click_graph_pred["points"][0]["customdata"][0])
+            elif ctx.triggered_id == "graph_variables":
+                selected_client.append(click_graph_var["points"][0]["customdata"][0])
 
             # On place en premier ceux qui ont été sélectionnés
         option_client_variable = []
-
+         
         if selected_client is not None:
             option_client_variable.extend([{'label': str(client), 'value': client} for client in selected_client])
             option_client_variable.extend([{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR'] if client not in selected_client])
@@ -1245,7 +1317,22 @@ def update_dropdown_menu(selected_client, selected_variable_x, selected_variable
                 
         return (option_drop_clients, option_drop_var_x, option_drop_var_y, option_drop_var_graph, option_client_variable,
                 selected_client, selected_variable_x, selected_variable_y, selected_affichage, n_click_echange)
+
+@app.callback(
+    Output(component_id="dropdown_client_var", component_property="value"),
     
+    Input(component_id="graph_pred", component_property="clickData"),
+    Input(component_id="graph_variables", component_property="clickData"),
+    prevent_initial_call=True,
+)
+def select_client_graph_var(click_graph_pred, click_graph_var):
+    # On sélectionne le client pour afficher l'impact de ses features sur son score
+    if ctx.triggered_id == "graph_pred":
+        return click_graph_pred["points"][0]["customdata"][0]
+    elif ctx.triggered_id == "graph_variables":
+        return click_graph_var["points"][0]["customdata"][0] 
+
+
 @app.callback(
     Output(component_id="table_client", component_property="children"),
     Output(component_id="table_prediction", component_property="children"),
@@ -1255,10 +1342,9 @@ def update_dropdown_menu(selected_client, selected_variable_x, selected_variable
     
     prevent_initial_call=True,
 )
-
-
+                
 def affichage_tab_clients(selected_client, fichier_utilisateur):
-            
+    
     if fichier_utilisateur is not None :
         # On prend la colonne ID client et les dernières colonnes liées à la prédiction crédit
         cols = [0] + list(range(-6, 0))
@@ -1270,24 +1356,32 @@ def affichage_tab_clients(selected_client, fichier_utilisateur):
             table1 = dash_table.DataTable(
                 data=file_df.iloc[:, :100].to_dict('records'),
                 page_size=10,
-                style_table={'overflowX': 'auto'}
+                style_table={'overflowX': 'auto'},
+                sort_action='native',  # permet de trier la colonnes
+                sort_mode='multi',      # permet de trier plusieurs colonnes
             )
             table2 = dash_table.DataTable(
                 data=file_df.iloc[:, cols].to_dict('records'),
                 page_size=10,
-                style_table={'overflowX': 'auto'}
+                style_table={'overflowX': 'auto'},
+                sort_action='native',  # permet de trier la colonnes
+                sort_mode='multi',      # permet de trier plusieurs colonnes
             )
         else :
             filtered_df = file_df[file_df['SK_ID_CURR'].isin(selected_client)]
             table1 = dash_table.DataTable(
                 data=filtered_df.iloc[:, :100].to_dict('records'),
                 page_size=10,
-                style_table={'overflowX': 'auto'}
+                style_table={'overflowX': 'auto'},
+                sort_action='native',  # permet de trier la colonnes
+                sort_mode='multi',      # permet de trier plusieurs colonnes
             )
             table2 = dash_table.DataTable(
                 data=filtered_df.iloc[:, cols].to_dict('records'),
                 page_size=10,
-                style_table={'overflowX': 'auto'}
+                style_table={'overflowX': 'auto'},
+                sort_action='native',  # permet de trier la colonnes
+                sort_mode='multi',      # permet de trier plusieurs colonnes
             )
     else : 
         table1 = dash_table.DataTable()
