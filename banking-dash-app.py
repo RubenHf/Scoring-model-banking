@@ -10,7 +10,10 @@ import io
 import numpy as np
 import itertools
 import time
+import scipy
 import requests
+from scipy import stats
+
 
 
 def scoring_pret(df, threshold):
