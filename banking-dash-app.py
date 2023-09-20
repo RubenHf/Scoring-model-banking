@@ -817,7 +817,7 @@ home_page = html.Div([
             dcc.Graph(id="graph_variables", style={'height': '600px', 'width': '50%', 'float': 'right'}),
 
             ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
-            html.Div(children="", id='statistique-variables', style={'width': '100%', 'float': 'right'}),
+            html.Div(children="", id='statistique-variables', style={'width': '100%', 'float': 'left'}),
             html.Hr(style={'border-top': '0px solid black'}), # Ligne horizontale
         ], style={'display': 'flex', 'flex-direction': 'column', 'width': '100%'}),
          
