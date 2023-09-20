@@ -15,15 +15,8 @@ import shap
 import pickle
 import time
 from mlflow.sklearn import load_model
+import requests
 
-# On load le modèle 
-model = load_model("banking_model_20230915203320")
-
-# on charge l'objet explainer du modèle
-with open('explainer_model.pkl', 'rb') as explainer_file:
-    explainer_model = pickle.load(explainer_file)
-# on charge les valeurs du modèle
-feature_importance = pd.read_csv("shap_values_model.csv") 
 
 def scoring_pret(df, threshold):
     
@@ -71,44 +64,146 @@ def scoring_pret(df, threshold):
     
     return df
 
-def application_model(df, model, threshold):
+def API_feature_importance_model():
+    # Fonction appelant l'API, renvoie les valeurs SHAP des features du modèle
+    
+    # Lien de l'API permettant de faire la prédiction
+    url="http://banking-model-api-924e29320872.herokuapp.com/shap_model"
+
+    # On envoie une requête POST au format JSON 
+    response = requests.post(url)
+
+    # On vérigie l'état de la réponse
+    if response.status_code == 200:
+        # Si tout s'est bien déroulé
+        
+        # On récupère une réponse sous le format json
+        df_reponse = response.json()  
+
+        # On retransforme sous format DataFrame
+        df_reponse = pd.DataFrame(df_reponse.get("data", {}))
+
+        # On retourne le dataframe modifié
+        return df_reponse
+    else:
+        # La requête a échouée
+        print("La requête a échoué avec le code :", response.status_code)
+        print("Contenu du message :", response.text)
+
+        return df
+
+def API_prediction(df, threshold):
+    # Fonction appelant l'API de prédiction
+    
+    # Lien de l'API permettant de faire la prédiction
+    url="http://banking-model-api-924e29320872.herokuapp.com/prediction"
+
+    df_preparation = copy.deepcopy(df)
+
+    # On enlève les valeurs nulles pour passer le dataframe à l'API
+    df_preparation = df_preparation.fillna(-.0123)
+
+    # On transforme en dictionnaire
+    df_preparation = df_preparation.to_dict('list')
+
+    # On envoie une requête POST au format JSON (nos données au format JSON et le threshold)
+    response = requests.post(url, json={"data": df_preparation, "thresh": threshold})
+
+    # On vérigie l'état de la réponse
+    if response.status_code == 200:
+        # Si tout s'est bien déroulé
+        # On récupère une réponse sous le format json
+        df_reponse = response.json()  
+
+        # On retransforme sous format DataFrame
+        df_reponse = pd.DataFrame(df_reponse.get("data", {}))
+
+        # On remet les valeurs np.nan
+        df_reponse = df_reponse.replace(-.0123, np.nan)
+
+        # On retourne le dataframe modifié
+        return df_reponse
+    else:
+        # La requête a échouée
+        print("La requête a échoué avec le code :", response.status_code)
+        print("Contenu du message :", response.text)
+
+        return df
+
+def API_local_importance(df):
+    # Fonction appelant l'API de mesure de l'importance locale des variables mesurée avec SHAP
+    
+    # Lien de l'API permettant de mesurer l'importance locale des variables de chaque client
+    url="http://banking-model-api-924e29320872.herokuapp.com/importance_client"
+
+    df_preparation = copy.deepcopy(df)
+
+    # On enlève les valeurs nulles pour passer le dataframe à l'API
+    df_preparation = df_preparation.fillna(-.0123)
+
+    # On transforme en dictionnaire
+    df_preparation = df_preparation.to_dict('list')
+
+    # On envoie une requête POST au format JSON 
+    response = requests.post(url, json={"data": df_preparation})
+
+    # On vérigie l'état de la réponse
+    if response.status_code == 200:
+        # Si tout s'est bien déroulé
+        # On récupère une réponse sous le format json
+        df_reponse = response.json()  
+
+        # On retransforme sous format DataFrame
+        df_reponse = pd.DataFrame(df_reponse.get("data", {}))
+
+        # On remet les valeurs np.nan
+        df_reponse = df_reponse.replace(-.0123, np.nan)
+
+        # On retourne le dataframe avec les importances locales
+        return df_reponse
+    else:
+        # La requête a échouée
+        print("La requête a échoué avec le code :", response.status_code)
+        print("Contenu du message :", response.text)
+
+        return None
+
+def API_get_threshold():
+    # Fonction appelant l'API et retournant le threshold optimal du modèle
+    
+    # Lien de l'API permettant de récupérer le threshold du modèle
+    url="http://banking-model-api-924e29320872.herokuapp.com/get_threshold"
+    
+    # On envoie une requête POST
+    response = requests.post(url)
+
+    # On vérigie l'état de la réponse
+    if response.status_code == 200:
+        # Si tout s'est bien déroulé
+        # On récupère une réponse sous le format json
+        th = response.json() 
+
+        # On retourne le threshold
+        return th.get("data", {})
+    
+    else:
+        # La requête a échouée
+        print("La requête a échoué avec le code :", response.status_code)
+        print("Contenu du message :", response.text)
+
+        return None
+
+def application_model(df, threshold):
     
     result_df = copy.deepcopy(df)
- 
-    # On prédit les probabilitées selon le modèle
-    # Prédiction d'avoir un prêt
-    result_df["proba_pred_pret"] = np.round(model.predict_proba(result_df)[:, 0], 2)
-    # Prédiction de ne pas avoir un prêt
-    result_df["proba_pred_non_pret"] = np.round(1 - result_df["proba_pred_pret"], 2)
     
-    # Résultat selon le threshold du modèle établit. 
-    # Si au dessus, la valeur = 1, ce qui correspond à la non obtention d'un prêt
-    result_df["prediction"] = np.where(result_df["proba_pred_pret"] > threshold, 0, 1)
+    # On réalise la prédiction en appelant l'API
+    result_df = API_prediction(result_df, threshold)
     
-    result_df["prediction_pret"] = np.where(result_df["prediction"] == 1, "Non pret", "Pret")
     result_df = scoring_pret(result_df, threshold)
 
     return result_df
 
-def feature_importance_client(df, model, explainer_model): 
-    
-    features = model.named_steps["select_columns"].transform(df).columns
-    
-    x_train_preprocessed = model[:-1].transform(df[features])
-    
-    selected_cols = df[features].columns[model.named_steps["feature_selection"].get_support()]
-    
-    x_train_preprocessed = pd.DataFrame(x_train_preprocessed, columns = selected_cols)
-    
-    shap_values = explainer_model(x_train_preprocessed)
-    
-    df_sk_shape = pd.DataFrame({'SK_ID_CURR': df["SK_ID_CURR"].values, 'VALEUR_TOTALE': shap_values.values.sum(axis=1)})
-
-    df_feat_shape = pd.DataFrame(shap_values.values, columns = selected_cols)
-
-    df_shape_score = pd.concat([df_sk_shape, df_feat_shape], axis = 1)
-    
-    return df_shape_score
 
 def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_point = "plotly", size = 18):
     
@@ -559,10 +654,11 @@ initial_size = 18
 initial_point_size = 8
 initial_palette = "plotly"
 
-# On initie le seuil
-with open('banking_model_seuil_20230915203320.pkl', 'rb') as seuil:
-    # On avait enregistré le seuil pour ne pas avoir le prêt, on prend ici son inverse.
-    initial_threshold = 1 - pickle.load(seuil)
+# On récupère le threshold optimal du modèle
+initial_threshold = API_get_threshold()
+
+# On charge l'importance des features sur le modèle qui a été généré par SHAP
+feature_importance = API_feature_importance_model()
 
 # Define the layout for the home page
 home_page = html.Div([ 
@@ -990,8 +1086,8 @@ def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_, proba_th
             file_df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
 
             # Plusieurs étapes de préparation du fichier
-            file_df = application_model(file_df, model, proba_threshold_model)
-            file_df_client_score = feature_importance_client(file_df, model, explainer_model)
+            file_df = application_model(file_df, proba_threshold_model)
+            file_df_client_score = API_local_importance(file_df)
 
             # On prépare pour stocker sur l'app
             fichier_utilisateur = file_df.to_json(date_format='iso', orient='split')
@@ -1003,8 +1099,8 @@ def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_, proba_th
         file_df = pd.read_csv("test.csv")
         
         # On mesure les différentes métriques
-        file_df = application_model(file_df, model, proba_threshold_model)
-        file_df_client_score = feature_importance_client(file_df, model, explainer_model)
+        file_df = application_model(file_df, proba_threshold_model)
+        file_df_client_score = API_local_importance(file_df)
         fichier_utilisateur = file_df.to_json(date_format='iso', orient='split')
         fichier_utilisateur_score = file_df_client_score.to_json(date_format='iso', orient='split')
                 
