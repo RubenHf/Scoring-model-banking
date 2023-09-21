@@ -1,0 +1,9 @@
+Version 1.0.0 
+Sortie de la version de travail du dashboard. 
+L'utilisateur peut charger un fichier test ou charger son propre fichier. 
+Les clients seront évalués selon le modèle développé.
+Les utilisateurs peuvent sélectionner un ou plusieurs clients pour comprendre où ils se situent selon les autres.
+Une compréhension des résultats du modèle peut être retrouvé.
+Une explication du modèle est également disponible.
+L'utilisateur peut identifier des variables clefs : c'est-à-dire, des variables pour lesquelles ses clients sont différents sur le statut d'obtention d'un prêt ou non.
+Le modèle utilisé a été optimisé, mais l'utilisateur peut y modifier le paramètrage : on donne les conséquences de sa modification sur le risque et le nombre de clients que ça peut impacter.
