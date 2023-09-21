@@ -1,3 +1,8 @@
+Version 1.1.0
+Ajout d'une fonctionnalité : Changement du style des markers des graphs
+Version 1.0.1
+Passage de scoring prêt dans l'API, donc le dashboard appel l'API pour réaliser le scoring des clients.
+
 Version 1.0.0 
 Sortie de la version de travail du dashboard. 
 L'utilisateur peut charger un fichier test ou charger son propre fichier. 
