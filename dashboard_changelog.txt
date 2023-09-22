@@ -1,3 +1,5 @@
+Version 1.2.1
+Correction du type de marqueur quand on sélectionne un client
 Version 1.2.0
 Ajout d'une fonctionnalité : Sélection des clients selon si ils ont obtenu un prêt ou non
 Version 1.1.0
