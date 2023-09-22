@@ -1,3 +1,5 @@
+Version 1.3.0
+Ajout d'une fonctionnalité : Sélection des clients selon leur score_note. On peut sélectionner de A à F général, ou dans les notes plus précises. La sélection se reflète sur le tableau et le graphique de répartition des clients.
 Version 1.2.1
 Correction du type de marqueur quand on sélectionne un client
 Version 1.2.0
