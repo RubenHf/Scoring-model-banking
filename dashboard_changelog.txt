@@ -1,3 +1,5 @@
+Version 1.3.2
+Correction sur la garde en mémoire des clients sélectionnés. Avant le correctif, il y avait une perte/oublie
 Version 1.3.1
 Correction affichage de la légende sur les clients sélectionnés sur score_note. Quand on choisi boxplot, un 3ème boxplot apparaît avec les clients sélectionnés
 Version 1.3.0

@@ -716,7 +716,7 @@ app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callbac
 server = app.server
 app.title = 'Modèle de prédiction'
 
-versionning = "version : 1.3.0"
+versionning = "version : 1.3.2"
 
 temps_actuel = time.time()
 # Temps d'inactivité
@@ -1253,7 +1253,7 @@ def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_, proba_th
     Output(component_id="dropdown_score_note", component_property="options"),
     
     Output(component_id="dropdown_client", component_property="value"),
-    Output(component_id="selected_clients_note", component_property="value"),
+    Output(component_id="selected_clients_note", component_property="data"),
     Output(component_id="dropdown_variable_x", component_property="value"),
     Output(component_id="dropdown_variable_y", component_property="value"),
     Output(component_id="dropdown_fig_type", component_property="value"),
@@ -1396,10 +1396,13 @@ def update_dropdown_menu(selected_client, selected_client_note, selected_client_
                     selected_affichage = "scatter" 
         
         option_client_categ = ["Pret", "Non pret", "Score note"]
+
         if selected_client_categ == "Score note":
             option_note_categ = options
-            # Si on a sélectionné 
-            if ctx.triggered_id  == "dropdown_score_note":
+            
+            # Si on a sélectionné des clients selon le score_note
+            if selected_client_note is not None:
+                
                 if selected_client_note in ["a", "b", "c", "d", "e", "f"]:
                     selected_client_note_liste = file_df.loc[file_df['score_note'].str.startswith(selected_client_note), "SK_ID_CURR"]
                 # Sinon c'est lettre spécifique
@@ -1436,7 +1439,7 @@ def select_client_graph_var(click_graph_pred, click_graph_var):
     Input(component_id="dropdown_client", component_property="value"),  
     Input(component_id="dropdown_client_categorie", component_property="value"),
     Input(component_id="fichier_utilisateur", component_property="data"),
-    Input(component_id="selected_clients_note", component_property="value"),
+    Input(component_id="selected_clients_note", component_property="data"),
     
     prevent_initial_call=True,
 )
@@ -1545,7 +1548,7 @@ def affichage_description(n_clicks, fichier_utilisateur, selected_client):
     
     State(component_id="dropdown_client", component_property="value"),
     State(component_id="dropdown_client_categorie", component_property="value"),
-    State(component_id="selected_clients_note", component_property="value"),
+    State(component_id="selected_clients_note", component_property="data"),
     State(component_id="fichier_utilisateur", component_property="data"),
     State(component_id="fichier_utilisateur_prediction", component_property="data"),
     prevent_initial_call=True,
@@ -1610,7 +1613,7 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
     
     Input(component_id="dropdown_scoring", component_property="value"),
     Input(component_id="dropdown_client", component_property="value"),
-    Input(component_id="selected_clients_note", component_property="value"),
+    Input(component_id="selected_clients_note", component_property="data"),
     Input(component_id="dropdown_variable_x", component_property="value"),
     Input(component_id="dropdown_variable_y", component_property="value"),
     Input(component_id="dropdown_fig_type", component_property="value"),
@@ -1843,7 +1846,6 @@ def inactivity(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg1
 # Run the app
 if __name__ == '__main__':
     app.run(debug=False)
-
 
 
 
