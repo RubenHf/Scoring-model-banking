@@ -8,59 +8,10 @@ import copy
 import base64
 import io
 import numpy as np
-import itertools
 import time
 import scipy
 import requests
 from scipy import stats
-
-
-
-def scoring_pret(df, threshold):
-    
-    # On calcul un score selon si le client a obtenu un prêt ou pas
-    # Ce score donne une autre appréciation des probabilités, plus parlant pour un consommateur
-    min_value = threshold  
-    max_value = threshold
-    
-    df.loc[df.prediction_pret == "Pret", "score"] = (df["proba_pred_pret"] - min_value) / (1 - min_value)
-    df.loc[df.prediction_pret == "Non pret", "score"] = (1 - (df["proba_pred_pret"] / max_value)) * - 1
-    df.loc[:, "score"] = round(df.loc[:, "score"], 4)
-    
-    lettres = ['a', 'b', 'c', 'd', 'e', 'f']
-    signes = ['++', '+', '-', '--']
-
-    # On génére 2 dictionnaires
-    bon_clients = {}
-    mauvais_clients = {}
-
-    point_decr = (100 / ((len(lettres) * len(signes)) / 2)) / 100
-
-    point = 1
-    for l, s in itertools.product(lettres[:3], signes):
-        key = l + s
-        bon_clients[key] = round(point, 2)
-        point -= point_decr
-    
-    point = 0
-    for l, s in itertools.product(lettres[3:], signes):
-        key = l + s
-        mauvais_clients[key] = round(point, 2)*-1
-        point += point_decr
-
-    condition1 = df.prediction_pret == "Pret"
-    condition2 = df.prediction_pret == "Non pret"
-
-    for keys, items in bon_clients.items():
-        df.loc[(condition1) & (df.score <= items), "score_note"] = keys
-
-    for keys, items in mauvais_clients.items():
-        df.loc[(condition2) & (df.score <= items), "score_note"] = keys
-
-
-    df.loc[:, "score"] = round(df.loc[:, "score"]*100, 2)
-    
-    return df
 
 def API_feature_importance_model():
     # Fonction appelant l'API, renvoie les valeurs SHAP des features du modèle
@@ -95,6 +46,44 @@ def API_prediction(df, threshold):
     
     # Lien de l'API permettant de faire la prédiction
     url="http://banking-model-api-924e29320872.herokuapp.com/prediction"
+
+    df_preparation = copy.deepcopy(df)
+
+    # On enlève les valeurs nulles pour passer le dataframe à l'API
+    df_preparation = df_preparation.fillna(-.0123)
+
+    # On transforme en dictionnaire
+    df_preparation = df_preparation.to_dict('list')
+
+    # On envoie une requête POST au format JSON (nos données au format JSON et le threshold)
+    response = requests.post(url, json={"data": df_preparation, "thresh": threshold})
+
+    # On vérigie l'état de la réponse
+    if response.status_code == 200:
+        # Si tout s'est bien déroulé
+        # On récupère une réponse sous le format json
+        df_reponse = response.json()  
+
+        # On retransforme sous format DataFrame
+        df_reponse = pd.DataFrame(df_reponse.get("data", {}))
+
+        # On remet les valeurs np.nan
+        df_reponse = df_reponse.replace(-.0123, np.nan)
+
+        # On retourne le dataframe modifié
+        return df_reponse
+    else:
+        # La requête a échouée
+        print("La requête a échoué avec le code :", response.status_code)
+        print("Contenu du message :", response.text)
+
+        return df
+
+def API_scoring(df, threshold):
+    # Fonction appelant l'API, renvoyant un score selon la prédiction
+        
+    # Lien de l'API permettant de faire la prédiction
+    url="http://banking-model-api-924e29320872.herokuapp.com/scoring"
 
     df_preparation = copy.deepcopy(df)
 
@@ -254,10 +243,9 @@ def application_model(df, threshold):
     # On réalise la prédiction en appelant l'API
     result_df = API_prediction(result_df, threshold)
     
-    result_df = scoring_pret(result_df, threshold)
+    result_df = API_scoring(result_df, threshold)
 
     return result_df
-
 
 def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_point = "plotly", size = 18):
     
@@ -369,7 +357,6 @@ def figure_feature_client_dash(df_shape, df_client, nb_variable = 10, color_poin
 def return_dataframe_client(df, list_client):
     return df.loc[df.SK_ID_CURR.isin(list_client)]
 
-
 def feature_importance_threshold(df, feats, importance, variance_importance = 0.9):
 
     # On récupère le total
@@ -457,8 +444,7 @@ def figure_feature_importance_dash(df, feats, importance, size, variance_importa
     # On retourne la figure
     return figure
 
-
-def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, point_size, font_size, proba_threshold_model):
+def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, point_size, font_size, proba_threshold_model, marker_type):
     
     if scoring_var == "score" :
         threshold = 0
@@ -469,14 +455,14 @@ def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, poin
         threshold = proba_threshold_model
         textH = threshold + 0.05
         textB = threshold - 0.05
-
+        
     if scoring_var in ["score", "proba_pred_pret"]:
         figure_score = px.strip(df, y=scoring_var,
                     # On fait figurer le nom des clients et leur note
                     hover_data=["SK_ID_CURR", "score_note"],  
                     # On établit la coloration selon la condition de prêt 
                     color=df["prediction_pret"],  
-                    color_discrete_map=color_discrete_map
+                    color_discrete_map=color_discrete_map,         
                     # on actualise les valeurs de l'axe des x
                     ).update_xaxes(range=[-0.5, 0.5], tickvals=[0]  
 
@@ -499,7 +485,7 @@ def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, poin
                     # On regroupe tout sur un seul tick
                     ).update_traces(offsetgroup=0.5)
         
-        figure_score.update_traces(marker = dict(size=point_size))
+        figure_score.update_traces(marker = dict(symbol = marker_type, size=point_size))
         
         if selected_client is not None :
             selected_data_p = df[(df["SK_ID_CURR"].isin(selected_client)) & (df["prediction_pret"] == "Pret")]
@@ -509,12 +495,14 @@ def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, poin
                 if not selected_data.empty:
                     trace = px.strip(selected_data, y=scoring_var, color=selected_data["prediction_pret"], 
                          color_discrete_map=color_discrete_map, hover_data=["SK_ID_CURR", "score_note"]
-                        ).update_traces(marker_size=point_size+18, name="Sélectionné(s)", 
+                        ).update_traces(marker = dict(symbol = marker_type), 
+                                        marker_size=point_size+18, name="Sélectionné(s)", 
                                         marker_line_color="black", marker_line_width=2)
                 else :
                     trace = px.strip()
                     
                 figure_score.add_trace(trace.data[0]).update_traces(offsetgroup=0.5)
+                
                 
 
     else : 
@@ -546,10 +534,10 @@ def figure_score_dash(df, scoring_var, selected_client, color_discrete_map, poin
     
     return figure_score
 
-def figure_variable_dash(df, selected_variable, selected_client, selected_affichage, color_discrete_map, point_size, font_size):
+def figure_variable_dash(df, selected_variable, selected_client, selected_client_score, selected_affichage, color_discrete_map, point_size, font_size, marker_type):
     # Initialisation
     figure_variables = px.scatter()
-    
+
     # On unpack
     x_variable, y_variable = selected_variable
     # Si une ou deux variables sont sélectionnées, on affiche soit un strip, soit un scatterplot
@@ -583,8 +571,30 @@ def figure_variable_dash(df, selected_variable, selected_client, selected_affich
         if figure_variables:
             figure_variables.update_layout(font=dict(size=font_size, color="black"))
             if selected_affichage != "density":
-                figure_variables.update_traces(marker=dict(size=point_size))
+                figure_variables.update_traces(marker=dict(symbol=marker_type, size=point_size))
                     
+        if selected_client_score is not None :
+            # On sélectionne les ID des clients sélectionnés
+            selected_data = df[df["SK_ID_CURR"].isin(selected_client_score)]
+            
+            if y_variable is None:
+                trace = px.strip(selected_data, y=x_variable, hover_data=hover_data
+                                ).update_traces(marker = dict(color = "green", symbol = marker_type), 
+                                    marker_size=point_size, name="Sélectionné(s) score_note", 
+                                    marker_line_color="black", marker_line_width=1)
+
+            elif y_variable is not None:
+                trace = px.scatter(selected_data, x=x_variable, y=y_variable, hover_data=hover_data
+                                ).update_traces(marker = dict(color = "green", symbol = marker_type), 
+                                    marker_size=point_size, name="Sélectionné(s) score_note", 
+                                    marker_line_color="black", marker_line_width=1)
+            
+            if (y_variable is not None) or (selected_affichage == "boxplot"):
+                figure_variables.add_trace(trace.data[0])
+            else:
+                figure_variables.add_trace(trace.data[0]).update_traces(offsetgroup=0.5)
+        
+        
         if selected_client is not None :
             selected_data_p = df[(df["SK_ID_CURR"].isin(selected_client)) & (df["prediction_pret"] == "Pret")]
             selected_data_np = df[(df["SK_ID_CURR"].isin(selected_client)) & (df["prediction_pret"] == "Non pret")]
@@ -596,13 +606,15 @@ def figure_variable_dash(df, selected_variable, selected_client, selected_affich
                     if y_variable is None:
                         trace = px.strip(selected_data, y=x_variable, color=selected_data["prediction_pret"], 
                         color_discrete_map=color_discrete_map, hover_data=hover_data
-                        ).update_traces(marker_size=point_size+18, name="Sélectionné(s)", 
+                        ).update_traces(marker = dict(symbol = marker_type), 
+                                        marker_size=point_size+18, name="Sélectionné(s)", 
                                         marker_line_color="black", marker_line_width=2)
 
                     elif y_variable is not None:
                         trace = px.scatter(selected_data, x=x_variable, y=y_variable, color=selected_data["prediction_pret"], 
                                            color_discrete_map=color_discrete_map, hover_data=hover_data
-                                          ).update_traces(marker_size=point_size+18, name="Sélectionné(s)", 
+                                          ).update_traces(marker = dict(symbol = marker_type), 
+                                                          marker_size=point_size+18, name="Sélectionné(s)", 
                                                           marker_line_color="black", marker_line_width=2)
                 else :
                     trace = px.strip()
@@ -610,6 +622,7 @@ def figure_variable_dash(df, selected_variable, selected_client, selected_affich
                     figure_variables.add_trace(trace.data[0])
                 else:
                     figure_variables.add_trace(trace.data[0]).update_traces(offsetgroup=0.5)
+        
         
 
     return figure_variables
@@ -698,6 +711,8 @@ app = Dash(__name__, external_stylesheets=external_stylesheets, suppress_callbac
 server = app.server
 app.title = 'Modèle de prédiction'
 
+versionning = "version : 1.3.0"
+
 temps_actuel = time.time()
 # Temps d'inactivité
 temps_inactivite = 5 * 60
@@ -706,9 +721,20 @@ interval_check = 5*60*1000 # 5 minutes
 initial_size = 18
 initial_point_size = 8
 initial_palette = "plotly"
+initial_style_point = "circle"
 
 # On récupère le threshold optimal du modèle
 initial_threshold = API_get_threshold()
+
+lettres = ['a', 'b', 'c', 'd', 'e', 'f']
+signes = ['++', '+', '-', '--']
+
+options = [{'label': f'{letter}', 'value': f'{letter}'}
+           for letter in lettres]
+
+options += [{'label': f'{letter}{sign}', 'value': f'{letter}{sign}'}
+            for letter in lettres for sign in signes]
+
 
 # On charge l'importance des features sur le modèle qui a été généré par SHAP
 feature_importance = API_feature_importance_model()
@@ -718,6 +744,10 @@ home_page = html.Div([
     # Titre dashboard
     html.Div(className='row', children="Utilisation du modèle pour prédire l'obtention d'un prêt",
              style={'textAlign': 'center', 'color': 'black', 'fontSize': 48}),
+    
+    html.Div(className='row', children=versionning,
+             style={'textAlign': 'right', 'color': 'black', 'fontSize': 12}),
+    
     html.Hr(style={'border-top': '4px solid black'}), # Ligne horizontale
     
     dcc.Link("Calibration du modèle", href="/page_2"),
@@ -742,13 +772,30 @@ home_page = html.Div([
     html.Div(className='client-selection', children=[
             html.Div("Visualisez les résultats de prédiction de prêt sur l'ensemble de vos clients (ou sélectionnés):",
                      style={'textAlign': 'center', 'color': 'black', 'fontSize': 30}),
-            dcc.Dropdown(
+            html.Div([
+                dcc.Dropdown(
                     value=None,
-                    style={'textAlign': 'left', 'color': 'black', 'fontSize': 15},
+                    style={'textAlign': 'left', 'color': 'black', 'fontSize': 15, 'width': '100%','margin-right': '10px'},
                     placeholder="Sélection client(s)",
                     multi=True,
-                    id='dropdown_client'
-            ),
+                    id='dropdown_client',
+                ),
+                dcc.Dropdown(
+                    value=None,
+                    style={'textAlign': 'left', 'color': 'black', 'fontSize': 15, 'width': '100%'},
+                    placeholder="Sélection catégorie de clients",
+                    multi=False,
+                    id='dropdown_client_categorie',
+                ),  
+            ], style={'display': 'flex', 'flex-direction': 'row', 'width': '100%'}),
+            html.Div([
+                dcc.Dropdown(
+                    value=None,
+                    style={'textAlign': 'left', 'color': 'black', 'fontSize': 15, 'width': '100%'},
+                    placeholder="Sélection catégorie de note de clients",
+                    multi=False,
+                    id='dropdown_score_note')
+            ], style={'float': 'right', 'width': '50%'})
         ],
     ),
 
@@ -800,16 +847,30 @@ home_page = html.Div([
         ], style={'width': '50%', 'float': 'right', 'margin': '0 auto'}),
 
         html.Div([
-            html.Label("Palette de couleurs :"),
-            dcc.RadioItems(id='color-palette-dropdown',
-                style={'color': 'black', 'fontSize': 15},
-                value=initial_palette, inline=True,
-                options=[
-                    {'label': 'Défaut', 'value': 'plotly'},
-                    {'label': 'Daltonien', 'value': 'colorblind'}
-                ]
-            ),
-        ], style={'textAlign': 'center', 'width': '100%'}),
+            html.Div([
+                html.Label("Palette de couleurs :"),
+                dcc.RadioItems(id='color-palette-dropdown',
+                    style={'color': 'black', 'fontSize': 15},
+                    value=initial_palette, inline=True,
+                    options=[
+                        {'label': 'Défaut', 'value': 'plotly'},
+                        {'label': 'Daltonien', 'value': 'colorblind'}
+                    ]
+                )], style={'width': '50%', 'float': 'left'}),
+            html.Div([
+                html.Label("Palette de styles :"),
+                dcc.RadioItems(id='style-point-dropdown',
+                    style={'color': 'black', 'fontSize': 15},
+                    value=initial_style_point, inline=True,
+                    options=[
+                        {'label': 'Rond', 'value': 'circle'},
+                        {'label': 'Carré', 'value': 'square'},
+                        {'label': 'Croix', 'value': 'x'},
+                        {'label': 'Diamand', 'value': 'diamond'}
+                    ]
+                )], style={'width': '50%', 'float': 'right'}),
+            ], style={'textAlign': 'center', 'width': '100%'}),
+        
         html.Div([
             html.Button("RESET affichage", id='reset-button', n_clicks=0),
         ], style={'textAlign': 'center', 'width': '100%'})
@@ -911,6 +972,7 @@ home_page = html.Div([
     dcc.Store(id='initialize_figure_model', data=False),  
     dcc.Store(id='fichier_utilisateur', data=None),
     dcc.Store(id='fichier_utilisateur_prediction', data=None),
+    dcc.Store(id='selected_clients_note', data=None),
 
 ]),
 
@@ -1182,14 +1244,19 @@ def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_, proba_th
     Output(component_id="dropdown_variable_y", component_property="options"),
     Output(component_id="dropdown_fig_type", component_property="options"),
     Output(component_id="dropdown_client_var", component_property="options"),
+    Output(component_id="dropdown_client_categorie", component_property="options"),
+    Output(component_id="dropdown_score_note", component_property="options"),
     
     Output(component_id="dropdown_client", component_property="value"),
+    Output(component_id="selected_clients_note", component_property="value"),
     Output(component_id="dropdown_variable_x", component_property="value"),
     Output(component_id="dropdown_variable_y", component_property="value"),
     Output(component_id="dropdown_fig_type", component_property="value"),
     Output(component_id="exchange-button", component_property="n_clicks"),
 
     Input(component_id="dropdown_client", component_property="value"),
+    Input(component_id="dropdown_score_note", component_property="value"),
+    Input(component_id="dropdown_client_categorie", component_property="value"),
     Input(component_id="dropdown_variable_x", component_property="value"),
     Input(component_id="dropdown_variable_y", component_property="value"),
     Input(component_id="dropdown_fig_type", component_property="value"),
@@ -1204,7 +1271,7 @@ def gestion_files(n_clicks_load_file, content, clear_statut, n_clicks_, proba_th
     prevent_initial_call=True,
 )
 
-def update_dropdown_menu(selected_client, selected_variable_x, selected_variable_y, 
+def update_dropdown_menu(selected_client, selected_client_note, selected_client_categ, selected_variable_x, selected_variable_y, 
                          selected_affichage, selected_client_variable, variance_importance, 
                          clear_statut, n_click_echange, fichier_utilisateur, click_graph_pred, click_graph_var):
     
@@ -1213,8 +1280,8 @@ def update_dropdown_menu(selected_client, selected_variable_x, selected_variable
         n_click_echange = 0
         # On empêche l'actualisation des autres
         (option_drop_clients, option_drop_var_graph, option_client_variable,
-                selected_client, selected_affichage) = [dash.no_update,
-        dash.no_update,dash.no_update,dash.no_update,dash.no_update]
+                selected_client, selected_client_note_liste, selected_affichage, option_client_categ, option_note_categ) = [dash.no_update,
+        dash.no_update,dash.no_update,dash.no_update,dash.no_update,dash.no_update,dash.no_update, dash.no_update]
         
         # on vérifie qu'on a bien 2 variables d'entrées
         if selected_variable_y is not None :
@@ -1232,11 +1299,11 @@ def update_dropdown_menu(selected_client, selected_variable_x, selected_variable
             option_drop_var_x, option_drop_var_y = dash.no_update, dash.no_update
             
         return (option_drop_clients, option_drop_var_x, option_drop_var_y, option_drop_var_graph, option_client_variable,
-                selected_client, selected_variable_x, selected_variable_y, selected_affichage, n_click_echange)
+                option_client_categ, option_note_categ, selected_client, selected_client_note_liste, selected_variable_x, selected_variable_y, selected_affichage, n_click_echange)
     
     # Par défaut, si aucun fichier de chargé
     if (fichier_utilisateur is None) or (clear_statut is True):
-        return ([], [], [], [], [], None, None, None, None, 0)
+        return ([], [], [], [], [], [], [], None, None, None, None, None, 0)
         
     elif fichier_utilisateur is not None :
         
@@ -1249,9 +1316,15 @@ def update_dropdown_menu(selected_client, selected_variable_x, selected_variable
         # Liste de variables (dépend des features liés au threshold du modèle)
         option_drop_var_x=[{'label': str(var), 'value': var} for var in [col for col in feat_imp_threshold]]
         option_drop_var_y=[]
+        
         # Liste des clients selon le fichier loadé
-        option_drop_clients=[{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR']]      
-
+        # Et dépendant si choix d'une catégorie de clients ou non
+        if selected_client_categ is not None:
+            filtered_df = file_df[file_df['prediction_pret'] == selected_client_categ]
+            option_drop_clients=[{'label': str(client), 'value': client} for client in filtered_df['SK_ID_CURR']]    
+        else :
+            option_drop_clients=[{'label': str(client), 'value': client} for client in file_df['SK_ID_CURR']] 
+        
         # On revient à la condition initiale
         selected_client = None if selected_client == [] else selected_client
 
@@ -1316,10 +1389,25 @@ def update_dropdown_menu(selected_client, selected_variable_x, selected_variable
                         {'label': 'Densité', 'value': 'density'}]
                 if(selected_affichage not in ["scatter", "density"]):
                     selected_affichage = "scatter" 
-
-                
+        
+        option_client_categ = ["Pret", "Non pret", "Score note"]
+        if selected_client_categ == "Score note":
+            option_note_categ = options
+            # Si on a sélectionné 
+            if ctx.triggered_id  == "dropdown_score_note":
+                if selected_client_note in ["a", "b", "c", "d", "e", "f"]:
+                    selected_client_note_liste = file_df.loc[file_df['score_note'].str.startswith(selected_client_note), "SK_ID_CURR"]
+                # Sinon c'est lettre spécifique
+                else:
+                    selected_client_note_liste = file_df.loc[file_df['score_note'] == selected_client_note, "SK_ID_CURR"]
+            else: 
+                selected_client_note_liste = None
+        else: 
+            option_note_categ = []
+            selected_client_note_liste = None
+            
         return (option_drop_clients, option_drop_var_x, option_drop_var_y, option_drop_var_graph, option_client_variable,
-                selected_client, selected_variable_x, selected_variable_y, selected_affichage, n_click_echange)
+                option_client_categ, option_note_categ, selected_client, selected_client_note_liste, selected_variable_x, selected_variable_y, selected_affichage, n_click_echange)
 
 @app.callback(
     Output(component_id="dropdown_client_var", component_property="value"),
@@ -1341,13 +1429,15 @@ def select_client_graph_var(click_graph_pred, click_graph_var):
     Output(component_id="table_prediction", component_property="children"),
 
     Input(component_id="dropdown_client", component_property="value"),  
+    Input(component_id="dropdown_client_categorie", component_property="value"),
     Input(component_id="fichier_utilisateur", component_property="data"),
+    Input(component_id="selected_clients_note", component_property="value"),
     
     prevent_initial_call=True,
 )
                 
-def affichage_tab_clients(selected_client, fichier_utilisateur):
-    
+def affichage_tab_clients(selected_client, client_categ, fichier_utilisateur, client_categ_note):
+
     if fichier_utilisateur is not None :
         # On prend la colonne ID client et les dernières colonnes liées à la prédiction crédit
         cols = [0] + list(range(-6, 0))
@@ -1355,37 +1445,42 @@ def affichage_tab_clients(selected_client, fichier_utilisateur):
         file_df = pd.read_json(fichier_utilisateur, orient='split')
         file_df = file_df.round(2)
         
-        if selected_client is None :
-            table1 = dash_table.DataTable(
-                data=file_df.iloc[:, :100].to_dict('records'),
-                page_size=10,
-                style_table={'overflowX': 'auto'},
-                sort_action='native',  # permet de trier la colonnes
-                sort_mode='multi',      # permet de trier plusieurs colonnes
-            )
-            table2 = dash_table.DataTable(
-                data=file_df.iloc[:, cols].to_dict('records'),
-                page_size=10,
-                style_table={'overflowX': 'auto'},
-                sort_action='native',  # permet de trier la colonnes
-                sort_mode='multi',      # permet de trier plusieurs colonnes
-            )
-        else :
-            filtered_df = file_df[file_df['SK_ID_CURR'].isin(selected_client)]
-            table1 = dash_table.DataTable(
-                data=filtered_df.iloc[:, :100].to_dict('records'),
-                page_size=10,
-                style_table={'overflowX': 'auto'},
-                sort_action='native',  # permet de trier la colonnes
-                sort_mode='multi',      # permet de trier plusieurs colonnes
-            )
-            table2 = dash_table.DataTable(
-                data=filtered_df.iloc[:, cols].to_dict('records'),
-                page_size=10,
-                style_table={'overflowX': 'auto'},
-                sort_action='native',  # permet de trier la colonnes
-                sort_mode='multi',      # permet de trier plusieurs colonnes
-            )
+        # On a des options communs pour les deux tableaux
+        tableau_options = {
+            'page_size': 10,
+            'style_table': {'overflowX': 'auto'},
+            'sort_action': 'native', # permet de trier la colonnes
+            'sort_mode': 'multi', # permet de trier plusieurs colonnes
+        }
+        # On filtre sur le choix entre clients ayant reçu le prêt ou non, ou alors on affiche tous 
+        if client_categ is not None:
+            if client_categ in ["Pret", "Non pret"]:
+                filtered_df = file_df[file_df['prediction_pret'] == client_categ]
+            else:
+                if client_categ_note is not None :
+                        filtered_df = file_df[file_df['SK_ID_CURR'].isin(client_categ_note)]
+                else:
+                    filtered_df = file_df
+        else:
+            filtered_df = file_df
+        
+        # On filtre sur la sélection d'un ou plusieurs clients
+        if selected_client is not None:
+            filtered_df = filtered_df[filtered_df['SK_ID_CURR'].isin(selected_client)]
+
+        # On crée le premier tableau
+        table1 = dash_table.DataTable(
+            data=filtered_df.iloc[:, :200].to_dict('records'),
+            **tableau_options,
+        )
+
+        # On crée le premier tableau
+        table2 = dash_table.DataTable(
+            data=filtered_df.iloc[:, cols].to_dict('records'),
+            **tableau_options,
+        )
+        
+    # Sinon pas de modification
     else : 
         table1 = dash_table.DataTable()
         table2 = dash_table.DataTable()
@@ -1444,12 +1539,14 @@ def affichage_description(n_clicks, fichier_utilisateur, selected_client):
     Input(component_id="download-data_client-button", component_property="n_clicks"),
     
     State(component_id="dropdown_client", component_property="value"),
+    State(component_id="dropdown_client_categorie", component_property="value"),
+    State(component_id="selected_clients_note", component_property="value"),
     State(component_id="fichier_utilisateur", component_property="data"),
     State(component_id="fichier_utilisateur_prediction", component_property="data"),
     prevent_initial_call=True,
 )
 
-def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_client, fichier_utilisateur, fichier_utilisateur_prediction):
+def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_client, selected_client_categ, selected_client_categ_note, fichier_utilisateur, fichier_utilisateur_prediction):
     
     file_sent = None
     
@@ -1474,9 +1571,25 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
         
         # On télécharge les données des clients sélectionnés
         elif ctx.triggered_id == "download-data_client-button" :
-            # Safegard pour éviter toute erreur de téléchargement
+            # Safegard pour éviter toute erreur de téléchargement avec conditions
+            # Selected_client est prioritaire sur la catégorie
             if selected_client is not None:
                 file_sent = dcc.send_data_frame(dl_file.loc[dl_file.SK_ID_CURR.isin(selected_client), :].to_csv, 
+                                                "Result_prediction_client.csv", index=False)
+            elif selected_client_categ is not None:
+                if selected_client_categ != "Score note":
+                    # On récupère les ID
+                    selected_df = file_df.loc[file_df.prediction_pret == selected_client_categ, "SK_ID_CURR"]
+                else:
+                    # On recherche tous les clients ayant un score de la lettre
+                    if selected_client_categ_note in ["a", "b", "c", "d", "e", "f"]:
+                        selected_df = file_df.loc[file_df['score_note'].str.startswith(selected_client_categ_note), "SK_ID_CURR"]
+                    # Sinon c'est lettre spécifique
+                    else:
+                        selected_df = file_df.loc[file_df['score_note'] == selected_client_categ_note, "SK_ID_CURR"]
+                
+                
+                file_sent = dcc.send_data_frame(dl_file.loc[dl_file.SK_ID_CURR.isin(selected_df), :].to_csv, 
                                                 "Result_prediction_client.csv", index=False)
             
     return file_sent
@@ -1492,6 +1605,7 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
     
     Input(component_id="dropdown_scoring", component_property="value"),
     Input(component_id="dropdown_client", component_property="value"),
+    Input(component_id="selected_clients_note", component_property="value"),
     Input(component_id="dropdown_variable_x", component_property="value"),
     Input(component_id="dropdown_variable_y", component_property="value"),
     Input(component_id="dropdown_fig_type", component_property="value"),
@@ -1500,6 +1614,7 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
     Input(component_id="color-palette-dropdown", component_property="value"),
     Input(component_id="point-size-slider", component_property="value"),
     Input(component_id="font-size-slider", component_property="value"), 
+    Input(component_id="style-point-dropdown", component_property="value"),
     Input(component_id="fichier_utilisateur", component_property="data"),
     Input(component_id="fichier_utilisateur_prediction", component_property="data"),
     Input(component_id="threshold_model", component_property="data"),
@@ -1508,9 +1623,9 @@ def download_files(n_clicks_dl_file_all, n_clicks_dl_file_clients, selected_clie
     #prevent_initial_call=True,
 )
 
-def figures_callback(scoring_choisie, selected_client, selected_variable_x, selected_variable_y,
+def figures_callback(scoring_choisie, selected_client, selected_client_score, selected_variable_x, selected_variable_y,
                      selected_affichage, selected_client_variable, variance_importance,
-                     color_point, point_size, font_size,
+                     color_point, point_size, font_size, marker_type,
                     fichier_utilisateur, fichier_utilisateur_prediction, proba_threshold_model, initialize_graph_model):    
     
     var_x_y = [selected_variable_x, selected_variable_y]
@@ -1531,7 +1646,7 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
     else : 
         figure_feat_imp = dash.no_update
     
-    trigger_patch = ["color-palette-dropdown", "point-size-slider", "font-size-slider"]    
+    trigger_patch = ["color-palette-dropdown", "point-size-slider", "font-size-slider", "style-point-dropdown"]    
     
     if fichier_utilisateur is not None :
         file_df = pd.read_json(fichier_utilisateur, orient='split')
@@ -1551,7 +1666,13 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
                     patched['data'][1]['marker']['color'] = color_discrete_map["Pret"]
                     patched['data'][3]['marker']['color'] = color_discrete_map["Non pret"]
                     patched['data'][2]['marker']['color'] = color_discrete_map["Pret"]
-
+            
+            elif ctx.triggered_id == "style-point-dropdown":
+                for patched in [patched_figure_score, patched_figure_variable]:
+                    for i in range(4):
+                        patched['data'][i]['marker']['symbol'] = marker_type
+                    
+                    
             elif ctx.triggered_id == "point-size-slider":
                 for patched in [patched_figure_score, patched_figure_variable]:
                     for i in range(4):
@@ -1575,10 +1696,10 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
         
         # fichier_utilisateur nous permet d'actualiser au chargement des données
         if ctx.triggered_id in ["dropdown_scoring", "fichier_utilisateur"]:
-            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size, proba_threshold_model)
+            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size, proba_threshold_model, marker_type)
             
         elif ctx.triggered_id in ["dropdown_variable_x", "dropdown_variable_y", "dropdown_fig_type"]:
-            figure_variable = figure_variable_dash(file_df, var_x_y, selected_client, selected_affichage, color_discrete_map, point_size, font_size)
+            figure_variable = figure_variable_dash(file_df, var_x_y, selected_client, selected_client_score, selected_affichage, color_discrete_map, point_size, font_size, marker_type)
             # On met à jour l'autre figure que dans la condition où une variable a été sélectionnée
             if ctx.triggered_id in ["dropdown_variable_x", "dropdown_variable_y"]:
                 figure_feat_imp = figure_feature_importance_dash(feature_importance, "Features", "Importance", 
@@ -1596,9 +1717,9 @@ def figures_callback(scoring_choisie, selected_client, selected_variable_x, sele
             else : 
                 figure_feature_importance_client = px.bar() 
 
-        elif (ctx.triggered_id == "dropdown_client") :
-            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size, proba_threshold_model)
-            figure_variable = figure_variable_dash(file_df, var_x_y, selected_client, selected_affichage, color_discrete_map, point_size, font_size)
+        elif (ctx.triggered_id == "dropdown_client" or ctx.triggered_id == "dropdown_score_note") :
+            figure_score = figure_score_dash(file_df, scoring_choisie, selected_client, color_discrete_map, point_size, font_size, proba_threshold_model, marker_type)
+            figure_variable = figure_variable_dash(file_df, var_x_y, selected_client, selected_client_score, selected_affichage, color_discrete_map, point_size, font_size, marker_type)
         
             
     else :
@@ -1644,13 +1765,14 @@ def statistique_affichage(var_x, var_y, fichier_utilisateur):
     Output(component_id="color-palette-dropdown", component_property="value"),
     Output(component_id="point-size-slider", component_property="value"),
     Output(component_id="font-size-slider", component_property="value"),
+    Output(component_id="style-point-dropdown", component_property="value"),
     Input(component_id="reset-button", component_property="n_clicks"),
     Input(component_id="del_file_button", component_property="n_clicks"),
 )
      
 def reset_affichage(n_clicks_reset, n_click_del):
    # On reset les valeurs 
-    return initial_palette,initial_point_size, initial_size
+    return initial_palette,initial_point_size, initial_size, initial_style_point
 
 # Principaux bouttons ou options 
 @app.callback(
@@ -1716,3 +1838,16 @@ def inactivity(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg1
 # Run the app
 if __name__ == '__main__':
     app.run(debug=False)
+
+
+
+
+
+
+
+
+
+
+
+
+
