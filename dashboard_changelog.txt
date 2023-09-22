@@ -1,3 +1,5 @@
+Version 1.3.1
+Correction affichage de la légende sur les clients sélectionnés sur score_note. Quand on choisi boxplot, un 3ème boxplot apparaît avec les clients sélectionnés
 Version 1.3.0
 Ajout d'une fonctionnalité : Sélection des clients selon leur score_note. On peut sélectionner de A à F général, ou dans les notes plus précises. La sélection se reflète sur le tableau et le graphique de répartition des clients.
 Version 1.2.1

@@ -567,7 +567,6 @@ def figure_variable_dash(df, selected_variable, selected_client, selected_client
                                                       hover_data=hover_data, 
                                                       color=color_column, 
                                                       color_discrete_map=color_discrete_map)
-                
         if figure_variables:
             figure_variables.update_layout(font=dict(size=font_size, color="black"))
             if selected_affichage != "density":
@@ -578,15 +577,21 @@ def figure_variable_dash(df, selected_variable, selected_client, selected_client
             selected_data = df[df["SK_ID_CURR"].isin(selected_client_score)]
             
             if y_variable is None:
-                trace = px.strip(selected_data, y=x_variable, hover_data=hover_data
+                if selected_affichage == "strip":
+                    trace = px.strip(selected_data, y=x_variable, hover_data=hover_data
                                 ).update_traces(marker = dict(color = "green", symbol = marker_type), 
-                                    marker_size=point_size, name="Sélectionné(s) score_note", 
-                                    marker_line_color="black", marker_line_width=1)
+                                    marker_size=point_size, name="Sélectionné(s) score_note", showlegend = True,
+                                    marker_line_color="black", marker_line_width=1).update_traces(offsetgroup=0.5)
+                elif selected_affichage == "boxplot":
+                    trace = px.box(selected_data, y=x_variable, hover_data=hover_data
+                                ).update_traces(marker = dict(color = "green", symbol = marker_type), 
+                                    marker_size=point_size, name="Sélectionné(s) score_note", showlegend = True,
+                                    marker_line_color="black", marker_line_width=1).update_traces(offsetgroup=0.5)
 
             elif y_variable is not None:
                 trace = px.scatter(selected_data, x=x_variable, y=y_variable, hover_data=hover_data
                                 ).update_traces(marker = dict(color = "green", symbol = marker_type), 
-                                    marker_size=point_size, name="Sélectionné(s) score_note", 
+                                    marker_size=point_size, name="Sélectionné(s) score_note", showlegend = True, 
                                     marker_line_color="black", marker_line_width=1)
             
             if (y_variable is not None) or (selected_affichage == "boxplot"):
