@@ -1,0 +1,19 @@
+artifact_path: "Mod\xE8le entrain\xE9"
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.11.4
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.2.2
+mlflow_version: 2.6.0
+model_uuid: 6b60d449aebb4a598352e004f0ec0152
+run_id: e4280ae2731f4943ab94e9ea3d41d139
+utc_time_created: '2023-09-14 02:46:07.092895'

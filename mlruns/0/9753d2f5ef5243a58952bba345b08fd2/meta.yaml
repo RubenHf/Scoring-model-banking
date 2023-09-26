@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/0/9753d2f5ef5243a58952bba345b08fd2/artifacts
+end_time: 1694668330366
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 9753d2f5ef5243a58952bba345b08fd2
+run_name: RNClassifier
+run_uuid: 9753d2f5ef5243a58952bba345b08fd2
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1694665080404
+status: 3
+tags: []
+user_id: '33664'

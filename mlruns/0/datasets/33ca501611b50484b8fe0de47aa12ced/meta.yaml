@@ -1,0 +1,8 @@
+digest: 3f1f9d58
+name: dataset
+profile: '{"num_rows": 10000, "num_elements": 40000}'
+schema: '{"mlflow_colspec": [{"type": "long", "name": "DAYS_BIRTH"}, {"type": "double",
+  "name": "DAYS_EMPLOYED_PERC"}, {"type": "long", "name": "CODE_GENDER"}, {"type":
+  "long", "name": "TARGET"}]}'
+source: '{"uri": "concatenate_files.csv"}'
+source_type: local

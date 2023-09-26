@@ -1,0 +1,16 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/305379463447269761/3742a156c8094763babf3a539b1e0235/artifacts
+deleted_time: 1693573060259
+end_time: 1693573019102
+entry_point_name: ''
+experiment_id: '305379463447269761'
+lifecycle_stage: deleted
+run_id: 3742a156c8094763babf3a539b1e0235
+run_name: DummyClassifier
+run_uuid: 3742a156c8094763babf3a539b1e0235
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1693573019049
+status: 4
+tags: []
+user_id: '33664'

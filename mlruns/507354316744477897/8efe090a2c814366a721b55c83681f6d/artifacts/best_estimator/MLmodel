@@ -1,0 +1,90 @@
+artifact_path: best_estimator
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.11.4
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.2.2
+mlflow_version: 2.6.0
+model_uuid: 0ece2c28a62a4e91bdf287ab5bdb2f58
+run_id: 8efe090a2c814366a721b55c83681f6d
+signature:
+  inputs: '[{"type": "long", "name": "SK_ID_CURR"}, {"type": "double", "name": "AMT_INCOME_TOTAL"},
+    {"type": "double", "name": "AMT_ANNUITY"}, {"type": "double", "name": "AMT_GOODS_PRICE"},
+    {"type": "double", "name": "REGION_POPULATION_RELATIVE"}, {"type": "double", "name":
+    "DAYS_REGISTRATION"}, {"type": "long", "name": "FLAG_MOBIL"}, {"type": "double",
+    "name": "CNT_FAM_MEMBERS"}, {"type": "long", "name": "LIVE_REGION_NOT_WORK_REGION"},
+    {"type": "long", "name": "REG_CITY_NOT_LIVE_CITY"}, {"type": "long", "name": "REG_CITY_NOT_WORK_CITY"},
+    {"type": "long", "name": "LIVE_CITY_NOT_WORK_CITY"}, {"type": "double", "name":
+    "EXT_SOURCE_2"}, {"type": "double", "name": "OBS_30_CNT_SOCIAL_CIRCLE"}, {"type":
+    "double", "name": "OBS_60_CNT_SOCIAL_CIRCLE"}, {"type": "long", "name": "FLAG_DOCUMENT_2"},
+    {"type": "double", "name": "AMT_REQ_CREDIT_BUREAU_YEAR"}, {"type": "long", "name":
+    "NAME_CONTRACT_TYPE_Cash loans"}, {"type": "long", "name": "NAME_INCOME_TYPE_Maternity
+    leave"}, {"type": "long", "name": "NAME_INCOME_TYPE_Unemployed"}, {"type": "long",
+    "name": "NAME_EDUCATION_TYPE_Academic degree"}, {"type": "long", "name": "NAME_EDUCATION_TYPE_Lower
+    secondary"}, {"type": "long", "name": "NAME_HOUSING_TYPE_Rented apartment"}, {"type":
+    "long", "name": "OCCUPATION_TYPE_Core staff"}, {"type": "long", "name": "OCCUPATION_TYPE_IT
+    staff"}, {"type": "long", "name": "OCCUPATION_TYPE_Laborers"}, {"type": "long",
+    "name": "ORGANIZATION_TYPE_University"}, {"type": "long", "name": "FONDKAPREMONT_MODE_reg
+    oper spec account"}, {"type": "long", "name": "WALLSMATERIAL_MODE_Others"}, {"type":
+    "long", "name": "WALLSMATERIAL_MODE_Wooden"}, {"type": "long", "name": "EMERGENCYSTATE_MODE_Yes"},
+    {"type": "double", "name": "PAYMENT_RATE"}, {"type": "double", "name": "BURO_DAYS_CREDIT_MIN"},
+    {"type": "double", "name": "BURO_DAYS_CREDIT_MAX"}, {"type": "double", "name":
+    "BURO_DAYS_CREDIT_MEAN"}, {"type": "double", "name": "BURO_DAYS_CREDIT_ENDDATE_MAX"},
+    {"type": "double", "name": "BURO_DAYS_CREDIT_ENDDATE_MEAN"}, {"type": "double",
+    "name": "BURO_MONTHS_BALANCE_SIZE_SUM"}, {"type": "double", "name": "BURO_CREDIT_ACTIVE_Bad
+    debt_MEAN"}, {"type": "double", "name": "BURO_CREDIT_TYPE_Consumer credit_MEAN"},
+    {"type": "double", "name": "BURO_CREDIT_TYPE_Loan for working capital replenishment_MEAN"},
+    {"type": "double", "name": "BURO_CREDIT_TYPE_Unknown type of loan_MEAN"}, {"type":
+    "double", "name": "ACTIVE_DAYS_CREDIT_MIN"}, {"type": "double", "name": "ACTIVE_DAYS_CREDIT_MAX"},
+    {"type": "double", "name": "ACTIVE_MONTHS_BALANCE_SIZE_SUM"}, {"type": "double",
+    "name": "CLOSED_DAYS_CREDIT_MAX"}, {"type": "double", "name": "CLOSED_DAYS_CREDIT_ENDDATE_MEAN"},
+    {"type": "double", "name": "CLOSED_MONTHS_BALANCE_SIZE_SUM"}, {"type": "double",
+    "name": "PREV_AMT_ANNUITY_MAX"}, {"type": "double", "name": "PREV_APP_CREDIT_PERC_MAX"},
+    {"type": "double", "name": "PREV_AMT_GOODS_PRICE_MEAN"}, {"type": "double", "name":
+    "PREV_HOUR_APPR_PROCESS_START_MIN"}, {"type": "double", "name": "PREV_HOUR_APPR_PROCESS_START_MAX"},
+    {"type": "double", "name": "PREV_RATE_DOWN_PAYMENT_MIN"}, {"type": "double", "name":
+    "PREV_RATE_DOWN_PAYMENT_MAX"}, {"type": "double", "name": "PREV_RATE_DOWN_PAYMENT_MEAN"},
+    {"type": "double", "name": "PREV_DAYS_DECISION_MAX"}, {"type": "double", "name":
+    "PREV_NAME_CONTRACT_TYPE_Cash loans_MEAN"}, {"type": "double", "name": "PREV_NAME_CONTRACT_TYPE_Consumer
+    loans_MEAN"}, {"type": "double", "name": "PREV_NAME_CASH_LOAN_PURPOSE_XNA_MEAN"},
+    {"type": "double", "name": "PREV_NAME_CONTRACT_STATUS_Canceled_MEAN"}, {"type":
+    "double", "name": "PREV_NAME_CONTRACT_STATUS_Unused offer_MEAN"}, {"type": "double",
+    "name": "PREV_NAME_PAYMENT_TYPE_Non-cash from your account_MEAN"}, {"type": "double",
+    "name": "PREV_CODE_REJECT_REASON_CLIENT_MEAN"}, {"type": "double", "name": "PREV_CODE_REJECT_REASON_HC_MEAN"},
+    {"type": "double", "name": "PREV_CODE_REJECT_REASON_SCO_MEAN"}, {"type": "double",
+    "name": "PREV_CODE_REJECT_REASON_VERIF_MEAN"}, {"type": "double", "name": "PREV_NAME_TYPE_SUITE_Unaccompanied_MEAN"},
+    {"type": "double", "name": "PREV_NAME_GOODS_CATEGORY_Weapon_MEAN"}, {"type": "double",
+    "name": "PREV_NAME_GOODS_CATEGORY_XNA_MEAN"}, {"type": "double", "name": "PREV_NAME_PORTFOLIO_Cash_MEAN"},
+    {"type": "double", "name": "PREV_NAME_PORTFOLIO_POS_MEAN"}, {"type": "double",
+    "name": "PREV_NAME_PRODUCT_TYPE_XNA_MEAN"}, {"type": "double", "name": "PREV_NAME_PRODUCT_TYPE_x-sell_MEAN"},
+    {"type": "double", "name": "PREV_NAME_SELLER_INDUSTRY_Clothing_MEAN"}, {"type":
+    "double", "name": "PREV_NAME_SELLER_INDUSTRY_XNA_MEAN"}, {"type": "double", "name":
+    "PREV_NAME_YIELD_GROUP_XNA_MEAN"}, {"type": "double", "name": "PREV_NAME_YIELD_GROUP_low_action_MEAN"},
+    {"type": "double", "name": "PREV_NAME_YIELD_GROUP_middle_MEAN"}, {"type": "double",
+    "name": "PREV_PRODUCT_COMBINATION_Cash Street: middle_MEAN"}, {"type": "double",
+    "name": "PREV_PRODUCT_COMBINATION_Cash X-Sell: high_MEAN"}, {"type": "double",
+    "name": "PREV_PRODUCT_COMBINATION_POS household without interest_MEAN"}, {"type":
+    "double", "name": "APPROVED_AMT_ANNUITY_MIN"}, {"type": "double", "name": "APPROVED_AMT_ANNUITY_MAX"},
+    {"type": "double", "name": "APPROVED_AMT_APPLICATION_MAX"}, {"type": "double",
+    "name": "APPROVED_APP_CREDIT_PERC_MIN"}, {"type": "double", "name": "APPROVED_AMT_GOODS_PRICE_MAX"},
+    {"type": "double", "name": "APPROVED_HOUR_APPR_PROCESS_START_MIN"}, {"type": "double",
+    "name": "APPROVED_HOUR_APPR_PROCESS_START_MAX"}, {"type": "double", "name": "APPROVED_RATE_DOWN_PAYMENT_MIN"},
+    {"type": "double", "name": "APPROVED_RATE_DOWN_PAYMENT_MEAN"}, {"type": "double",
+    "name": "APPROVED_DAYS_DECISION_MAX"}, {"type": "double", "name": "POS_MONTHS_BALANCE_MAX"},
+    {"type": "double", "name": "POS_MONTHS_BALANCE_MEAN"}, {"type": "double", "name":
+    "POS_NAME_CONTRACT_STATUS_XNA_MEAN"}, {"type": "double", "name": "INSTAL_PAYMENT_DIFF_MAX"},
+    {"type": "double", "name": "INSTAL_DAYS_ENTRY_PAYMENT_MAX"}, {"type": "double",
+    "name": "INSTAL_DAYS_ENTRY_PAYMENT_MEAN"}, {"type": "double", "name": "INSTAL_COUNT"},
+    {"type": "double", "name": "ANNEES_AGE"}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "int64", "shape": [-1]}}]'
+  params: null
+utc_time_created: '2023-09-02 16:53:57.901056'

@@ -1,0 +1,16 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/305379463447269761/fa8e060738464a64bd81e0f88fcc2193/artifacts
+deleted_time: 1695746752083
+end_time: 1693573086919
+entry_point_name: ''
+experiment_id: '305379463447269761'
+lifecycle_stage: deleted
+run_id: fa8e060738464a64bd81e0f88fcc2193
+run_name: name
+run_uuid: fa8e060738464a64bd81e0f88fcc2193
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1693573086869
+status: 4
+tags: []
+user_id: '33664'

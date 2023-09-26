@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/0/93ed375daee74364ba770123aa747b02/artifacts
+end_time: 1694665078214
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 93ed375daee74364ba770123aa747b02
+run_name: LGBMClassifier
+run_uuid: 93ed375daee74364ba770123aa747b02
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1694664350929
+status: 3
+tags: []
+user_id: '33664'

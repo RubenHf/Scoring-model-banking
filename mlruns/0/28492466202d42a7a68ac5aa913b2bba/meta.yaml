@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/0/28492466202d42a7a68ac5aa913b2bba/artifacts
+end_time: 1694664350893
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 28492466202d42a7a68ac5aa913b2bba
+run_name: XGBClassifier
+run_uuid: 28492466202d42a7a68ac5aa913b2bba
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1694662823839
+status: 3
+tags: []
+user_id: '33664'

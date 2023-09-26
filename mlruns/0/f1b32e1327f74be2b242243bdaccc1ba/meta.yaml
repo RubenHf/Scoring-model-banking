@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/0/f1b32e1327f74be2b242243bdaccc1ba/artifacts
+end_time: 1694659053363
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: f1b32e1327f74be2b242243bdaccc1ba
+run_name: RandomForestClassifier
+run_uuid: f1b32e1327f74be2b242243bdaccc1ba
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1694654612520
+status: 3
+tags: []
+user_id: '33664'

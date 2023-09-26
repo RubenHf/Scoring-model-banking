@@ -1,0 +1,1 @@
+{'imputer': [SimpleImputer(strategy='median')], 'scaler': [StandardScaler()], 'feature_selection__k': [40, 60], 'model__C': [0.1, 0.5, 1], 'model__max_iter': [100, 500, 1000], 'model__class_weight': [{0: 0.1, 1: 0.9}]}

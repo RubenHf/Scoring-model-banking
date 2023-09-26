@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/0/e4280ae2731f4943ab94e9ea3d41d139/artifacts
+end_time: 1694659571037
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: e4280ae2731f4943ab94e9ea3d41d139
+run_name: NaivesBayesClassifier
+run_uuid: e4280ae2731f4943ab94e9ea3d41d139
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1694659053440
+status: 3
+tags: []
+user_id: '33664'

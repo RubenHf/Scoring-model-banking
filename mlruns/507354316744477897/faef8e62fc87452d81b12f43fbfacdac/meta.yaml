@@ -1,0 +1,16 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/507354316744477897/faef8e62fc87452d81b12f43fbfacdac/artifacts
+deleted_time: 1695746771999
+end_time: 1694717243106
+entry_point_name: ''
+experiment_id: '507354316744477897'
+lifecycle_stage: deleted
+run_id: faef8e62fc87452d81b12f43fbfacdac
+run_name: LogisticRegression
+run_uuid: faef8e62fc87452d81b12f43fbfacdac
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1694716959651
+status: 4
+tags: []
+user_id: '33664'

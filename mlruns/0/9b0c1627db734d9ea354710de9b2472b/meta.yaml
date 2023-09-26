@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/0/9b0c1627db734d9ea354710de9b2472b/artifacts
+end_time: 1694660679093
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 9b0c1627db734d9ea354710de9b2472b
+run_name: SGDClassifier
+run_uuid: 9b0c1627db734d9ea354710de9b2472b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1694660154399
+status: 3
+tags: []
+user_id: '33664'

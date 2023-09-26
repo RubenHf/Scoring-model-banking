@@ -1,0 +1,1 @@
+[('feature_selection', SelectKBest(k=40)), ('scaler', StandardScaler()), ('sampler', None), ('model', DummyClassifier(random_state=42))]

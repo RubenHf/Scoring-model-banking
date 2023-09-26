@@ -1,0 +1,8 @@
+digest: d1ce1871
+name: dataset
+profile: '{"num_rows": 5600, "num_elements": 16800}'
+schema: '{"mlflow_colspec": [{"type": "long", "name": "DAYS_BIRTH"}, {"type": "double",
+  "name": "DAYS_EMPLOYED_PERC"}, {"type": "long", "name": "CODE_GENDER"}]}'
+source: '{"tags": {"mlflow.user": "33664", "mlflow.source.name": "C:\\Users\\33664\\anaconda3\\lib\\site-packages\\ipykernel_launcher.py",
+  "mlflow.source.type": "LOCAL"}}'
+source_type: code

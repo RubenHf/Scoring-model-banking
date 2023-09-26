@@ -1,0 +1,16 @@
+artifact_uri: file:///C:/Users/33664/Desktop/Data%20scientist%20formation/%5BProjets%5D/Projet%207/mlruns/507354316744477897/2820b3e272f0466eaa1b100654bc7f37/artifacts
+deleted_time: 1695746772017
+end_time: 1694668864852
+entry_point_name: ''
+experiment_id: '507354316744477897'
+lifecycle_stage: deleted
+run_id: 2820b3e272f0466eaa1b100654bc7f37
+run_name: RNClassifier
+run_uuid: 2820b3e272f0466eaa1b100654bc7f37
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1694668449949
+status: 4
+tags: []
+user_id: '33664'

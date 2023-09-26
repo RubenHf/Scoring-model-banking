@@ -1,0 +1,1 @@
+{'custom_score': make_scorer(my_custom_scoring, needs_proba=True), 'roc_auc': 'roc_auc', 'precision_scorer': make_scorer(precision_score, zero_division=1), 'recall_scorer': make_scorer(recall_score, zero_division=1), 'f1_scorer': make_scorer(f1_score, zero_division=1), 'f_beta': make_scorer(fbeta_score, zero_division=1, beta=2)}
