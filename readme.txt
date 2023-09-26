@@ -28,6 +28,3 @@ Contient un fichier html contenant une analyse du datadrift
 
 /mlruns_logs 
 Contient le suivi mlflow des derniers développement des modèles
-
-Note méthodologique 
-Contient un rapport sur le projet, son développement et les résultats 
